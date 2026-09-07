@@ -1,0 +1,8 @@
+{
+  "name": "Sistem Seleksi KIP-Kuliah UNIHAZ",
+  "description": "Sistem Pengelolaan dan Seleksi Mahasiswa KIP-Kuliah Universitas Hazairin (UNIHAZ) - Master Data, CRUD Peserta, Verifikasi Berkas, Survey Lapangan, Nilai UTBK, Wawancara, Ranking Otomatis, Penetapan Kelulusan, Laporan SK Rektor, dan Manajemen Operator RBAC.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

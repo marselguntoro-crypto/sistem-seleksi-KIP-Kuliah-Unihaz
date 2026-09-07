@@ -1,0 +1,795 @@
+import React, { useState, useMemo } from 'react';
+import { 
+  User, 
+  DashboardStats, 
+  ParticipantScoreItem, 
+  AcademicYear, 
+  Faculty, 
+  StudyProgram, 
+  Participant,
+  SelectionWeights,
+  SelectionAuditLog,
+  DatabaseBackupItem 
+} from './types';
+import { 
+  SEEDED_USERS, 
+  INITIAL_STATS, 
+  TOP_RANKING_DATA,
+  INITIAL_ACADEMIC_YEARS,
+  INITIAL_FACULTIES,
+  INITIAL_STUDY_PROGRAMS,
+  INITIAL_PARTICIPANTS
+} from './data/mockData';
+import { INITIAL_AUDIT_LOGS, INITIAL_BACKUPS } from './data/initialAuditAndBackup';
+import { DEFAULT_SELECTION_WEIGHTS, calculateParticipantFinalScore } from './utils/selectionUtils';
+import { Navbar } from './components/Navbar';
+import { Sidebar } from './components/Sidebar';
+import { DashboardView } from './components/DashboardView';
+import { LoginView } from './components/LoginView';
+import { TestRunnerView } from './components/TestRunnerView';
+import { CodeExplorerModal } from './components/CodeExplorerModal';
+import { AcademicYearsView } from './components/master/AcademicYearsView';
+import { FacultiesView } from './components/master/FacultiesView';
+import { StudyProgramsView } from './components/master/StudyProgramsView';
+import { ParticipantsView } from './components/participants/ParticipantsView';
+import { ImportExcelView } from './components/import/ImportExcelView';
+import { DocumentVerificationView } from './components/selection/DocumentVerificationView';
+import { SurveyEvaluationView } from './components/selection/SurveyEvaluationView';
+import { UtbkScoreView } from './components/selection/UtbkScoreView';
+import { InterviewScoreView } from './components/selection/InterviewScoreView';
+import { RankingResultsView } from './components/selection/RankingResultsView';
+import { ReportsView } from './components/reports/ReportsView';
+import { OperatorsView } from './components/admin/OperatorsView';
+import { AuditLogsView } from './components/admin/AuditLogsView';
+import { SelectionWeightsView } from './components/admin/SelectionWeightsView';
+import { BackupRestoreView } from './components/admin/BackupRestoreView';
+import { AlertCircle, CheckCircle2, X } from 'lucide-react';
+
+export default function App() {
+  const [users, setUsers] = useState<User[]>(SEEDED_USERS);
+  const [currentUser, setCurrentUser] = useState<User | null>(SEEDED_USERS[0]);
+  const [stats, setStats] = useState<DashboardStats>(INITIAL_STATS);
+  const [weights, setWeights] = useState<SelectionWeights>(DEFAULT_SELECTION_WEIGHTS);
+  const [rankings, setRankings] = useState<ParticipantScoreItem[]>(TOP_RANKING_DATA);
+  const [activeRoute, setActiveRoute] = useState<string>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'tests' | 'code'>('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
+  const [isRecalculating, setIsRecalculating] = useState(false);
+
+  // Phase 2 State: Master Data & Participants
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>(INITIAL_ACADEMIC_YEARS);
+  const [faculties, setFaculties] = useState<Faculty[]>(INITIAL_FACULTIES);
+  const [studyPrograms, setStudyPrograms] = useState<StudyProgram[]>(INITIAL_STUDY_PROGRAMS);
+  const [participants, setParticipants] = useState<Participant[]>(INITIAL_PARTICIPANTS);
+
+  // Phase 3 State: Audit Logs & Database Backups
+  const [auditLogs, setAuditLogs] = useState<SelectionAuditLog[]>(INITIAL_AUDIT_LOGS);
+  const [backups, setBackups] = useState<DatabaseBackupItem[]>(INITIAL_BACKUPS);
+
+  const addAuditLog = (log: Omit<SelectionAuditLog, 'id' | 'timestamp'>) => {
+    const now = new Date();
+    const timestamp = now.toISOString().replace('T', ' ').slice(0, 19);
+    const newLog: SelectionAuditLog = {
+      ...log,
+      id: Date.now(),
+      timestamp,
+      ipAddress: log.ipAddress || '10.14.20.101',
+    };
+    setAuditLogs((prev) => [newLog, ...prev]);
+  };
+
+  // Toast notification state
+  const [toast, setToast] = useState<{
+    type: 'error' | 'success' | 'warning';
+    title: string;
+    message: string;
+  } | null>(null);
+
+  const showToast = (type: 'error' | 'success' | 'warning', title: string, message: string) => {
+    setToast({ type, title, message });
+    setTimeout(() => {
+      setToast(null);
+    }, 4500);
+  };
+
+  const handleRestrictedAttempt = (moduleName: string) => {
+    showToast(
+      'error',
+      '403 Forbidden - Akses Ditolak',
+      `Role "${currentUser?.role}" tidak memiliki izin (Spatie permission) untuk mengakses modul ${moduleName}.`
+    );
+  };
+
+  const handleRunRecalculate = () => {
+    setIsRecalculating(true);
+    showToast('success', 'SelectionCalculationService Dipicu', 'Menghitung ulang skor akhir berdasarkan bobot: UTBK (30%), Wawancara (40%), Survey (30%)...');
+
+    setTimeout(() => {
+      // Recalculate scores
+      const updated = rankings.map((item) => {
+        const calculated =
+          (item.utbkScore * 0.3) +
+          (item.interviewScore * 0.4) +
+          (item.surveyScore * 0.3);
+        return {
+          ...item,
+          finalScore: parseFloat(calculated.toFixed(2))
+        };
+      });
+
+      // Sort DESC
+      updated.sort((a, b) => b.finalScore - a.finalScore);
+      // Reassign ranks
+      const reRanked = updated.map((item, idx) => ({
+        ...item,
+        rank: idx + 1
+      }));
+
+      setRankings(reRanked);
+      setIsRecalculating(false);
+      showToast('success', 'Kalkulasi Selesai', 'Peringkat dan nilai akhir peserta berhasil diperbarui.');
+    }, 800);
+  };
+
+  // Participant Handlers
+  const handleAddParticipant = (newP: Omit<Participant, 'id'>) => {
+    const nextId = participants.length > 0 ? Math.max(...participants.map((p) => p.id)) + 1 : 1;
+    const itemWithId: Participant = {
+      ...newP,
+      id: nextId
+    };
+    setParticipants([itemWithId, ...participants]);
+    showToast('success', 'Peserta Ditambahkan', `Calon mahasiswa ${newP.name} berhasil disimpan ke database.`);
+  };
+
+  const handleUpdateParticipant = (updated: Participant) => {
+    setParticipants(participants.map((p) => (p.id === updated.id ? updated : p)));
+    showToast('success', 'Data Diperbarui', `Data peserta ${updated.name} berhasil diperbarui.`);
+  };
+
+  const handleBatchUpdateParticipants = (updatedList: Participant[]) => {
+    setParticipants(updatedList);
+    showToast(
+      'success',
+      'Penetapan Hasil Berhasil',
+      `Status kelulusan dan ranking ${updatedList.length} peserta telah berhasil diperbarui sesuai kuota prodi.`
+    );
+  };
+
+  const handleDeleteParticipant = (id: number) => {
+    const target = participants.find((p) => p.id === id);
+    setParticipants(participants.filter((p) => p.id !== id));
+    showToast('success', 'Peserta Dihapus', `Data peserta ${target?.name || ''} telah dihapus dari database.`);
+  };
+
+  const handleImportSuccess = (newItems: Participant[]) => {
+    setParticipants((prev) => [...newItems, ...prev]);
+    showToast(
+      'success',
+      'Import Transaksi Berhasil',
+      `Sebanyak ${newItems.length} data peserta baru berhasil dimasukkan melalui DB::transaction.`
+    );
+    setActiveRoute('participants');
+  };
+
+  // Master Data Academic Years Handlers
+  const handleAddAcademicYear = (newYear: Omit<AcademicYear, 'id'>) => {
+    const nextId = academicYears.length > 0 ? Math.max(...academicYears.map((y) => y.id)) + 1 : 1;
+    let list = [...academicYears];
+    if (newYear.isActive) {
+      list = list.map((y) => ({ ...y, isActive: false }));
+    }
+    setAcademicYears([...list, { ...newYear, id: nextId }]);
+    showToast('success', 'Tahun Akademik Ditambahkan', `Tahun akademik ${newYear.code} berhasil dibuat.`);
+  };
+
+  const handleUpdateAcademicYear = (updated: AcademicYear) => {
+    let list = [...academicYears];
+    if (updated.isActive) {
+      list = list.map((y) => ({ ...y, isActive: y.id === updated.id }));
+    } else {
+      list = list.map((y) => (y.id === updated.id ? updated : y));
+    }
+    setAcademicYears(list);
+    showToast('success', 'Tahun Akademik Diperbarui', `Data tahun akademik ${updated.code} berhasil diperbarui.`);
+  };
+
+  const handleDeleteAcademicYear = (id: number) => {
+    const target = academicYears.find((y) => y.id === id);
+    if (target?.isActive) {
+      showToast('error', 'Aksi Ditolak', 'Tahun akademik yang sedang aktif tidak dapat dihapus.');
+      return { success: false, message: 'Tahun akademik yang sedang aktif tidak dapat dihapus.' };
+    }
+    setAcademicYears((prev) => prev.filter((y) => y.id !== id));
+    showToast('success', 'Tahun Akademik Dihapus', 'Data tahun akademik telah dihapus.');
+    return { success: true, message: 'Data tahun akademik telah dihapus.' };
+  };
+
+  const handleToggleAcademicYearActive = (id: number) => {
+    const target = academicYears.find((y) => y.id === id);
+    if (!target) return;
+    const nextState = !target.isActive;
+    let list = academicYears.map((y) => {
+      if (y.id === id) return { ...y, isActive: nextState };
+      if (nextState) return { ...y, isActive: false };
+      return y;
+    });
+    setAcademicYears(list);
+    showToast('success', 'Status Diubah', `Tahun akademik ${target.code} kini ${nextState ? 'AKTIF' : 'NONAKTIF'}.`);
+  };
+
+  // Master Data Faculties Handlers
+  const handleAddFaculty = (newFaculty: Omit<Faculty, 'id'>) => {
+    const nextId = faculties.length > 0 ? Math.max(...faculties.map((f) => f.id)) + 1 : 1;
+    setFaculties([...faculties, { ...newFaculty, id: nextId }]);
+    showToast('success', 'Fakultas Ditambahkan', `${newFaculty.name} berhasil ditambahkan.`);
+  };
+
+  const handleUpdateFaculty = (updated: Faculty) => {
+    setFaculties(faculties.map((f) => (f.id === updated.id ? updated : f)));
+    showToast('success', 'Fakultas Diperbarui', `Data ${updated.name} berhasil disimpan.`);
+  };
+
+  const handleDeleteFaculty = (id: number) => {
+    const target = faculties.find((f) => f.id === id);
+    const hasProdis = studyPrograms.some((p) => p.facultyId === id);
+    if (hasProdis) {
+      showToast('error', 'Aksi Ditolak', `Fakultas "${target?.name || ''}" masih menaungi Program Studi aktif.`);
+      return { success: false, message: `Fakultas "${target?.name || ''}" masih menaungi Program Studi aktif.` };
+    }
+    setFaculties((prev) => prev.filter((f) => f.id !== id));
+    showToast('success', 'Fakultas Dihapus', `${target?.name || ''} berhasil dihapus.`);
+    return { success: true, message: `${target?.name || ''} berhasil dihapus.` };
+  };
+
+  const handleToggleFacultyActive = (id: number) => {
+    setFaculties(faculties.map((f) => (f.id === id ? { ...f, isActive: !f.isActive } : f)));
+  };
+
+  // Master Data Study Programs Handlers
+  const handleAddStudyProgram = (newProdi: Omit<StudyProgram, 'id'>) => {
+    const nextId = studyPrograms.length > 0 ? Math.max(...studyPrograms.map((p) => p.id)) + 1 : 1;
+    setStudyPrograms([...studyPrograms, { ...newProdi, id: nextId }]);
+    showToast('success', 'Program Studi Ditambahkan', `${newProdi.name} berhasil disimpan.`);
+  };
+
+  const handleUpdateStudyProgram = (updated: StudyProgram) => {
+    setStudyPrograms(studyPrograms.map((p) => (p.id === updated.id ? updated : p)));
+    showToast('success', 'Program Studi Diperbarui', `Data ${updated.name} berhasil diperbarui.`);
+  };
+
+  const handleDeleteStudyProgram = (id: number) => {
+    const target = studyPrograms.find((p) => p.id === id);
+    const hasParticipants = participants.some(
+      (p) => p.firstChoiceProdiId === id || p.secondChoiceProdiId === id
+    );
+    if (hasParticipants) {
+      showToast(
+        'error',
+        'Aksi Ditolak',
+        `Program Studi "${target?.name || ''}" sudah dipilih oleh pendaftar KIP-Kuliah.`
+      );
+      return { success: false, message: `Program Studi "${target?.name || ''}" sudah dipilih oleh pendaftar KIP-Kuliah.` };
+    }
+    setStudyPrograms((prev) => prev.filter((p) => p.id !== id));
+    showToast('success', 'Program Studi Dihapus', `${target?.name || ''} berhasil dihapus.`);
+    return { success: true, message: `${target?.name || ''} berhasil dihapus.` };
+  };
+
+  const handleToggleStudyProgramActive = (id: number) => {
+    setStudyPrograms(studyPrograms.map((p) => (p.id === id ? { ...p, isActive: !p.isActive } : p)));
+  };
+
+  // User / Operator Management Handlers
+  const handleAddUser = (newUser: Omit<User, 'id'>) => {
+    const nextId = users.length > 0 ? Math.max(...users.map((u) => u.id)) + 1 : 1;
+    const createdUser: User = {
+      ...newUser,
+      id: nextId
+    };
+    setUsers((prev) => [...prev, createdUser]);
+    showToast(
+      'success',
+      'Operator Ditambahkan',
+      `Akun operator "${createdUser.name}" (@${createdUser.username}) dengan role "${createdUser.role}" berhasil dibuat.`
+    );
+  };
+
+  const handleUpdateUser = (updatedUser: User) => {
+    setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
+    if (currentUser?.id === updatedUser.id) {
+      setCurrentUser(updatedUser);
+    }
+    showToast(
+      'success',
+      'Operator Diperbarui',
+      `Data operator "${updatedUser.name}" (@${updatedUser.username}) telah berhasil disimpan.`
+    );
+  };
+
+  const handleDeleteUser = (userId: number) => {
+    const target = users.find((u) => u.id === userId);
+    if (userId === 1) {
+      showToast('error', 'Aksi Ditolak', 'Akun Super Admin Utama (ID 1) tidak dapat dihapus.');
+      return;
+    }
+    if (currentUser?.id === userId) {
+      showToast('error', 'Aksi Ditolak', 'Anda tidak dapat menghapus akun Anda sendiri saat sedang aktif login.');
+      return;
+    }
+    setUsers((prev) => prev.filter((u) => u.id !== userId));
+    showToast(
+      'success',
+      'Operator Dihapus',
+      `Akun operator "${target?.name || ''}" (@${target?.username || ''}) telah dihapus dari sistem.`
+    );
+  };
+
+  const handleToggleUserActive = (userId: number) => {
+    if (userId === 1) {
+      showToast('warning', 'Peringatan', 'Status Super Admin Utama tidak dapat dinonaktifkan.');
+      return;
+    }
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id === userId) {
+          const nextState = !u.isActive;
+          showToast(
+            'success',
+            'Status Akun Diubah',
+            `Akun @${u.username} sekarang ${nextState ? 'AKTIF' : 'NONAKTIF'}.`
+          );
+          return { ...u, isActive: nextState };
+        }
+        return u;
+      })
+    );
+  };
+
+  // Selection Weights & Audit Handlers
+  const handleUpdateWeights = (newWeights: SelectionWeights) => {
+    const oldWeightsStr = `${weights.utbkWeight}/${weights.interviewWeight}/${weights.surveyWeight}/${weights.affirmationWeight}`;
+    const newWeightsStr = `${newWeights.utbkWeight}/${newWeights.interviewWeight}/${newWeights.surveyWeight}/${newWeights.affirmationWeight}`;
+    setWeights(newWeights);
+    addAuditLog({
+      module: 'BOBOT_SELEKSI',
+      action: 'Pembaruan Formula Bobot Seleksi',
+      changedBy: currentUser?.name || 'Admin',
+      role: currentUser?.role || 'Super Admin',
+      oldStatus: oldWeightsStr,
+      newStatus: newWeightsStr,
+      details: `Penyesuaian formula: UTBK ${newWeights.utbkWeight}%, Wawancara ${newWeights.interviewWeight}%, Survey ${newWeights.surveyWeight}%, Afirmasi ${newWeights.affirmationWeight}%.`,
+      severity: 'warning',
+    });
+    showToast('success', 'Bobot Diperbarui', 'Konfigurasi formula bobot seleksi telah diperbarui.');
+  };
+
+  // Backup & Restore Handlers
+  const handleCreateBackup = (newBackup: DatabaseBackupItem) => {
+    setBackups((prev) => [newBackup, ...prev]);
+    addAuditLog({
+      module: 'BACKUP',
+      action: 'Pembuatan Snapshot Database',
+      changedBy: currentUser?.name || 'Admin',
+      role: currentUser?.role || 'Super Admin',
+      newStatus: newBackup.filename,
+      details: `Pencadangan database berhasil (${newBackup.formattedSize}, Tipe: ${newBackup.type}).`,
+      severity: 'info',
+    });
+    showToast('success', 'Backup Berhasil', `Snapshot database "${newBackup.filename}" telah berhasil dibuat.`);
+  };
+
+  const handleDeleteBackup = (id: string) => {
+    const target = backups.find((b) => b.id === id);
+    setBackups((prev) => prev.filter((b) => b.id !== id));
+    addAuditLog({
+      module: 'BACKUP',
+      action: 'Penghapusan Snapshot Database',
+      changedBy: currentUser?.name || 'Admin',
+      role: currentUser?.role || 'Super Admin',
+      oldStatus: target?.filename || id,
+      newStatus: 'DELETED',
+      details: `Penghapusan berkas snapshot ${target?.filename || id}.`,
+      severity: 'warning',
+    });
+    showToast('success', 'Backup Dihapus', 'Berkas backup telah dihapus.');
+  };
+
+  const handleRestoreBackup = (backup: DatabaseBackupItem) => {
+    addAuditLog({
+      module: 'BACKUP',
+      action: 'Pemulihan Database (Restore Snapshot)',
+      changedBy: currentUser?.name || 'Admin',
+      role: currentUser?.role || 'Super Admin',
+      details: `Database dipulihkan ke snapshot ${backup.filename}.`,
+      severity: 'danger',
+    });
+    showToast('success', 'Database Dipulihkan', `Sistem berhasil dipulihkan dari snapshot "${backup.filename}".`);
+  };
+
+  const handleRestoreFromJson = (jsonData: any) => {
+    if (jsonData?.data?.participants && Array.isArray(jsonData.data.participants)) {
+      setParticipants(jsonData.data.participants);
+    }
+    if (jsonData?.data?.studyPrograms && Array.isArray(jsonData.data.studyPrograms)) {
+      setStudyPrograms(jsonData.data.studyPrograms);
+    }
+    if (jsonData?.data?.faculties && Array.isArray(jsonData.data.faculties)) {
+      setFaculties(jsonData.data.faculties);
+    }
+    if (jsonData?.data?.academicYears && Array.isArray(jsonData.data.academicYears)) {
+      setAcademicYears(jsonData.data.academicYears);
+    }
+    if (jsonData?.weights) {
+      setWeights(jsonData.weights);
+    }
+    addAuditLog({
+      module: 'BACKUP',
+      action: 'Pemulihan Database dari File JSON',
+      changedBy: currentUser?.name || 'Admin',
+      role: currentUser?.role || 'Super Admin',
+      details: 'Data peserta dan konfigurasi program studi berhasil dipulihkan dari berkas ekspor JSON.',
+      severity: 'danger',
+    });
+    showToast('success', 'Pemulihan Sukses', 'Seluruh data sistem berhasil dipulihkan dari berkas JSON.');
+  };
+
+  // Dynamic Stats computed from live participants and master data
+  const dynamicStats: DashboardStats = useMemo(() => {
+    const totalApplicants = participants.length;
+    const completeDocs = participants.filter((p) => p.documentStatus === 'Lengkap').length;
+    const passedApplicants = participants.filter((p) => p.selectionStatus === 'Lulus').length;
+    const totalQuota = studyPrograms.reduce((sum, p) => sum + (p.isActive ? p.quota : 0), 0);
+
+    return {
+      totalApplicants,
+      verifiedDocuments: completeDocs,
+      verifiedPercentage: totalApplicants > 0 ? Math.round((completeDocs / totalApplicants) * 100) : 0,
+      quotaAvailable: totalQuota,
+      quotaAllocated: passedApplicants,
+      utbkCompleted: participants.filter((p) => (p.utbkScore || 0) > 0).length,
+      surveyCompleted: participants.filter((p) => (p.surveyScore || 0) > 0).length,
+      interviewCompleted: participants.filter((p) => (p.interviewScore || 0) > 0).length,
+      statusCounts: {
+        submitted: participants.filter((p) => p.documentStatus === 'Belum Diverifikasi').length,
+        verified: completeDocs,
+        revision: participants.filter((p) => p.documentStatus === 'Perlu Perbaikan').length,
+        rejected: participants.filter((p) => p.documentStatus === 'Ditolak').length
+      }
+    };
+  }, [participants, studyPrograms]);
+
+  // If logged out, render the authentic Laravel Login page
+  if (!currentUser) {
+    return (
+      <LoginView
+        availableUsers={users}
+        onLoginSuccess={(user) => {
+          setCurrentUser(user);
+          showToast('success', 'Login Berhasil', `Selamat datang kembali, ${user.name}!`);
+        }}
+      />
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans text-slate-800">
+      {/* Top Navbar */}
+      <Navbar
+        currentUser={currentUser}
+        onLogout={() => {
+          setCurrentUser(null);
+          showToast('success', 'Logout', 'Anda telah keluar dari sesi sistem.');
+        }}
+        onOpenCodeExplorer={() => setIsCodeModalOpen(true)}
+        onOpenTestRunner={() => setActiveTab('tests')}
+        onSwitchRole={(newUser) => {
+          setCurrentUser(newUser);
+          showToast(
+            'success',
+            'Role Berubah',
+            `Sesi disimulasikan sebagai ${newUser.name} (${newUser.role}). Hak akses sidebar diperbarui otomatis.`
+          );
+        }}
+        availableUsers={users}
+        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+      />
+
+      <div className="flex flex-1">
+        {/* Role-Protected Sidebar */}
+        <Sidebar
+          currentUser={currentUser}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          activeRoute={activeRoute}
+          onNavigate={(route) => {
+            setActiveRoute(route);
+            if (activeTab !== 'dashboard') {
+              setActiveTab('dashboard');
+            }
+          }}
+          onRestrictedAttempt={handleRestrictedAttempt}
+        />
+
+        {/* Main Content Area */}
+        <main className="flex-1 lg:pl-64 flex flex-col min-h-[calc(100vh-4rem)]">
+          {/* Active Banner / Tab Notification if inside non-dashboard */}
+          <div className="p-4 sm:p-5 lg:p-6 flex-1">
+            {activeTab === 'tests' ? (
+              <TestRunnerView />
+            ) : activeTab === 'code' ? (
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-base font-bold text-slate-900">Arsip Kode Laravel 12 - Phase 1</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">Struktur database, Controller, Model, dan Service Kalkulasi</p>
+                  </div>
+                  <button
+                    onClick={() => setIsCodeModalOpen(true)}
+                    className="px-3.5 py-2 rounded-lg bg-blue-900 text-white font-bold text-xs hover:bg-blue-800 transition cursor-pointer"
+                  >
+                    Buka File Inspector Penuh
+                  </button>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed mb-4">
+                  Seluruh file arsitektur pondasi Phase 1 (migration, model, seeder, request, controller, middleware, layout Blade, routing, dan feature tests) telah selesai dibuat sesuai standar resmi Laravel 12.
+                </p>
+                <div className="bg-[#0a1931] text-emerald-300 p-4 rounded-xl font-mono text-xs overflow-x-auto border border-blue-900">
+                  composer create-project laravel/laravel kip-kuliah-unihaz<br />
+                  composer require spatie/laravel-permission maatwebsite/excel barryvdh/laravel-dompdf<br />
+                  php artisan migrate:fresh --seed<br />
+                  php artisan test --filter=SelectionCalculationTest
+                </div>
+              </div>
+            ) : activeRoute === 'academic-years' ? (
+              <AcademicYearsView
+                academicYears={academicYears}
+                onAdd={handleAddAcademicYear}
+                onUpdate={handleUpdateAcademicYear}
+                onDelete={handleDeleteAcademicYear}
+                onSetActive={handleToggleAcademicYearActive}
+                onAddYear={handleAddAcademicYear}
+                onUpdateYear={handleUpdateAcademicYear}
+                onDeleteYear={handleDeleteAcademicYear}
+                onToggleActive={handleToggleAcademicYearActive}
+              />
+            ) : activeRoute === 'faculties' ? (
+              <FacultiesView
+                faculties={faculties}
+                studyPrograms={studyPrograms}
+                onAdd={handleAddFaculty}
+                onUpdate={handleUpdateFaculty}
+                onDelete={handleDeleteFaculty}
+                onToggleStatus={handleToggleFacultyActive}
+                onAddFaculty={handleAddFaculty}
+                onUpdateFaculty={handleUpdateFaculty}
+                onDeleteFaculty={handleDeleteFaculty}
+                onToggleActive={handleToggleFacultyActive}
+              />
+            ) : activeRoute === 'study-programs' ? (
+              <StudyProgramsView
+                studyPrograms={studyPrograms}
+                faculties={faculties}
+                participants={participants}
+                onAdd={handleAddStudyProgram}
+                onUpdate={handleUpdateStudyProgram}
+                onDelete={handleDeleteStudyProgram}
+                onToggleStatus={handleToggleStudyProgramActive}
+                onAddProgram={handleAddStudyProgram}
+                onUpdateProgram={handleUpdateStudyProgram}
+                onDeleteProgram={handleDeleteStudyProgram}
+                onToggleActive={handleToggleStudyProgramActive}
+              />
+            ) : activeRoute === 'import' ? (
+              <ImportExcelView
+                existingParticipants={participants}
+                studyPrograms={studyPrograms}
+                academicYears={academicYears}
+                onImportSuccess={handleImportSuccess}
+                onCancel={() => setActiveRoute('participants')}
+              />
+            ) : activeRoute === 'documents' ? (
+              <DocumentVerificationView
+                participants={participants}
+                studyPrograms={studyPrograms}
+                currentUser={currentUser}
+                onUpdateParticipant={handleUpdateParticipant}
+              />
+            ) : activeRoute === 'survey' ? (
+              <SurveyEvaluationView
+                participants={participants}
+                studyPrograms={studyPrograms}
+                currentUser={currentUser}
+                onUpdateParticipant={handleUpdateParticipant}
+              />
+            ) : activeRoute === 'utbk' ? (
+              <UtbkScoreView
+                participants={participants}
+                studyPrograms={studyPrograms}
+                currentUser={currentUser}
+                onUpdateParticipant={handleUpdateParticipant}
+              />
+            ) : activeRoute === 'interview' ? (
+              <InterviewScoreView
+                participants={participants}
+                studyPrograms={studyPrograms}
+                currentUser={currentUser}
+                onUpdateParticipant={handleUpdateParticipant}
+              />
+            ) : activeRoute === 'ranking' || activeRoute === 'results' ? (
+              <RankingResultsView
+                participants={participants}
+                studyPrograms={studyPrograms}
+                academicYears={academicYears}
+                currentUser={currentUser}
+                onUpdateParticipant={handleUpdateParticipant}
+                onBatchUpdateParticipants={handleBatchUpdateParticipants}
+                weights={weights}
+                onUpdateWeights={(w) => {
+                  setWeights(w);
+                  showToast('success', 'Bobot Diperbarui', 'Konfigurasi formula bobot seleksi telah diperbarui.');
+                }}
+              />
+            ) : activeRoute === 'reports' ? (
+              <ReportsView
+                participants={participants}
+                studyPrograms={studyPrograms}
+                academicYears={academicYears}
+                currentUser={currentUser}
+              />
+            ) : activeRoute === 'operators' ? (
+              currentUser.role === 'Super Admin' ? (
+                <OperatorsView
+                  users={users}
+                  currentUser={currentUser}
+                  onAddUser={handleAddUser}
+                  onUpdateUser={handleUpdateUser}
+                  onDeleteUser={handleDeleteUser}
+                  onToggleUserActive={handleToggleUserActive}
+                />
+              ) : (
+                <div className="bg-white p-8 rounded-xl border border-rose-200 text-center shadow-xs">
+                  <AlertCircle className="w-10 h-10 text-rose-500 mx-auto mb-2" />
+                  <h2 className="text-base font-bold text-slate-800">403 - Akses Terbatas (Forbidden)</h2>
+                  <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                    Hanya Super Admin yang berwenang mengelola akun operator seleksi KIP-Kuliah UNIHAZ.
+                  </p>
+                </div>
+              )
+            ) : activeRoute === 'audit' ? (
+              currentUser.role === 'Super Admin' || currentUser.permissions.includes('view-audit-logs') || currentUser.permissions.includes('all-permissions') ? (
+                <AuditLogsView
+                  auditLogs={auditLogs}
+                  currentUser={currentUser}
+                />
+              ) : (
+                <div className="bg-white p-8 rounded-xl border border-rose-200 text-center shadow-xs">
+                  <AlertCircle className="w-10 h-10 text-rose-500 mx-auto mb-2" />
+                  <h2 className="text-base font-bold text-slate-800">403 - Akses Terbatas (Forbidden)</h2>
+                  <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                    Role "{currentUser.role}" tidak memiliki izin untuk melihat riwayat audit log sistem.
+                  </p>
+                </div>
+              )
+            ) : activeRoute === 'weights' ? (
+              currentUser.role === 'Super Admin' || currentUser.permissions.includes('manage-selection-weights') || currentUser.permissions.includes('all-permissions') ? (
+                <SelectionWeightsView
+                  weights={weights}
+                  onUpdateWeights={handleUpdateWeights}
+                  participants={participants}
+                  currentUser={currentUser}
+                />
+              ) : (
+                <div className="bg-white p-8 rounded-xl border border-rose-200 text-center shadow-xs">
+                  <AlertCircle className="w-10 h-10 text-rose-500 mx-auto mb-2" />
+                  <h2 className="text-base font-bold text-slate-800">403 - Akses Terbatas (Forbidden)</h2>
+                  <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                    Role "{currentUser.role}" tidak memiliki izin untuk mengonfigurasi formula bobot seleksi.
+                  </p>
+                </div>
+              )
+            ) : activeRoute === 'backup' ? (
+              currentUser.role === 'Super Admin' || currentUser.permissions.includes('manage-backup-restore') || currentUser.permissions.includes('all-permissions') ? (
+                <BackupRestoreView
+                  backups={backups}
+                  participants={participants}
+                  studyPrograms={studyPrograms}
+                  faculties={faculties}
+                  academicYears={academicYears}
+                  users={users}
+                  auditLogs={auditLogs}
+                  weights={weights}
+                  currentUser={currentUser}
+                  onCreateBackup={handleCreateBackup}
+                  onDeleteBackup={handleDeleteBackup}
+                  onRestoreBackup={handleRestoreBackup}
+                  onRestoreFromJson={handleRestoreFromJson}
+                />
+              ) : (
+                <div className="bg-white p-8 rounded-xl border border-rose-200 text-center shadow-xs">
+                  <AlertCircle className="w-10 h-10 text-rose-500 mx-auto mb-2" />
+                  <h2 className="text-base font-bold text-slate-800">403 - Akses Terbatas (Forbidden)</h2>
+                  <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                    Hanya Super Admin yang diizinkan melakukan pencadangan atau pemulihan darurat database sistem.
+                  </p>
+                </div>
+              )
+            ) : activeRoute === 'participants' || activeRoute === 'export' ? (
+              <ParticipantsView
+                participants={participants}
+                studyPrograms={studyPrograms}
+                academicYears={academicYears}
+                onAdd={handleAddParticipant}
+                onUpdate={handleUpdateParticipant}
+                onDelete={handleDeleteParticipant}
+                onNavigateToImport={() => setActiveRoute('import')}
+              />
+            ) : (
+              <DashboardView
+                stats={dynamicStats}
+                rankings={rankings}
+                currentUser={currentUser}
+                onNavigate={setActiveRoute}
+                onRunRecalculate={handleRunRecalculate}
+                isRecalculating={isRecalculating}
+              />
+            )}
+          </div>
+
+          {/* Institutional Footer */}
+          <footer className="bg-white border-t border-slate-200 px-6 py-3.5 text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div>
+              &copy; {new Date().getFullYear()} Universitas Prof. Dr. Hazairin, SH (UNIHAZ) Bengkulu. Biro Administrasi Akademik & Kemahasiswaan.
+            </div>
+            <div className="flex items-center space-x-3">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-100 text-yellow-800 border border-yellow-300/60 uppercase">
+                Laravel 12 + MySQL 8+
+              </span>
+              <span>Tahun Akademik: <strong className="text-slate-800 font-semibold">2026/2027</strong></span>
+            </div>
+          </footer>
+        </main>
+      </div>
+
+      {/* Code Explorer Modal */}
+      <CodeExplorerModal
+        isOpen={isCodeModalOpen}
+        onClose={() => setIsCodeModalOpen(false)}
+      />
+
+      {/* Dynamic Toast Alert Notification */}
+      {toast && (
+        <div className="fixed bottom-5 right-5 z-50 max-w-md animate-slideUp">
+          <div
+            className={`p-4 rounded-xl shadow-2xl border flex items-start gap-3 ${
+              toast.type === 'error'
+                ? 'bg-rose-900 text-white border-rose-700'
+                : toast.type === 'success'
+                ? 'bg-slate-900 text-white border-slate-700'
+                : 'bg-amber-900 text-white border-amber-700'
+            }`}
+          >
+            {toast.type === 'error' ? (
+              <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+            ) : (
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="font-bold text-xs">{toast.title}</div>
+              <div className="text-[11px] opacity-90 mt-0.5">{toast.message}</div>
+            </div>
+            <button
+              onClick={() => setToast(null)}
+              className="p-1 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
