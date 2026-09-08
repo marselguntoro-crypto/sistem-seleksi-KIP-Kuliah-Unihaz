@@ -48,7 +48,15 @@ import { AlertCircle, CheckCircle2, X } from 'lucide-react';
 
 export default function App() {
   const [users, setUsers] = useState<User[]>(SEEDED_USERS);
-  const [currentUser, setCurrentUser] = useState<User | null>(SEEDED_USERS[0]);
+  // Default currentUser to null so new visitors & shared URLs see the LoginView first
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem('unihaz_kipk_session_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [stats, setStats] = useState<DashboardStats>(INITIAL_STATS);
   const [weights, setWeights] = useState<SelectionWeights>(DEFAULT_SELECTION_WEIGHTS);
   const [rankings, setRankings] = useState<ParticipantScoreItem[]>(TOP_RANKING_DATA);
@@ -95,9 +103,12 @@ export default function App() {
 
         if (dbUsers.status === 'fulfilled' && dbUsers.value.length > 0) {
           setUsers(dbUsers.value);
-          // Sync current user role/data if exists
-          const matched = dbUsers.value.find(u => u.username === 'admin') || dbUsers.value[0];
-          setCurrentUser(matched);
+          // Only sync if user was already logged in from saved session
+          setCurrentUser((prev) => {
+            if (!prev) return null;
+            const matched = dbUsers.value.find(u => u.username === prev.username || u.id === prev.id);
+            return matched || prev;
+          });
         }
         if (dbYears.status === 'fulfilled' && dbYears.value.length > 0) {
           setAcademicYears(dbYears.value);
@@ -535,6 +546,11 @@ export default function App() {
       <LoginView
         availableUsers={users}
         onLoginSuccess={(user) => {
+          try {
+            localStorage.setItem('unihaz_kipk_session_user', JSON.stringify(user));
+          } catch (e) {
+            console.error('Failed to save session:', e);
+          }
           setCurrentUser(user);
           showToast('success', 'Login Berhasil', `Selamat datang kembali, ${user.name}!`);
         }}
@@ -548,12 +564,22 @@ export default function App() {
       <Navbar
         currentUser={currentUser}
         onLogout={() => {
+          try {
+            localStorage.removeItem('unihaz_kipk_session_user');
+          } catch (e) {
+            console.error('Failed to clear session:', e);
+          }
           setCurrentUser(null);
           showToast('success', 'Logout', 'Anda telah keluar dari sesi sistem.');
         }}
         onOpenCodeExplorer={() => setIsCodeModalOpen(true)}
         onOpenTestRunner={() => setActiveTab('tests')}
         onSwitchRole={(newUser) => {
+          try {
+            localStorage.setItem('unihaz_kipk_session_user', JSON.stringify(newUser));
+          } catch (e) {
+            console.error('Failed to update session:', e);
+          }
           setCurrentUser(newUser);
           showToast(
             'success',

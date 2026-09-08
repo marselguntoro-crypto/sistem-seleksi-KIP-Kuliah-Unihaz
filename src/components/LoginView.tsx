@@ -9,8 +9,8 @@ interface LoginViewProps {
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, availableUsers = SEEDED_USERS }) => {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('Admin@12345');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [attemptCount, setAttemptCount] = useState(0);
