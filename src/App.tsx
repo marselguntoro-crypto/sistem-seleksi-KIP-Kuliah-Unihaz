@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   User, 
   DashboardStats, 
@@ -22,6 +22,7 @@ import {
 } from './data/mockData';
 import { INITIAL_AUDIT_LOGS, INITIAL_BACKUPS } from './data/initialAuditAndBackup';
 import { DEFAULT_SELECTION_WEIGHTS, calculateParticipantFinalScore } from './utils/selectionUtils';
+import { api } from './utils/api';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { DashboardView } from './components/DashboardView';
@@ -66,6 +67,66 @@ export default function App() {
   // Phase 3 State: Audit Logs & Database Backups
   const [auditLogs, setAuditLogs] = useState<SelectionAuditLog[]>(INITIAL_AUDIT_LOGS);
   const [backups, setBackups] = useState<DatabaseBackupItem[]>(INITIAL_BACKUPS);
+  const [isDbLoaded, setIsDbLoaded] = useState(false);
+
+  // Load initial data from PostgreSQL Cloud SQL database
+  useEffect(() => {
+    async function loadDataFromDb() {
+      try {
+        const [
+          dbUsers,
+          dbYears,
+          dbFaculties,
+          dbProdis,
+          dbParticipants,
+          dbWeights,
+          dbAudits,
+          dbBackups
+        ] = await Promise.allSettled([
+          api.getUsers(),
+          api.getAcademicYears(),
+          api.getFaculties(),
+          api.getStudyPrograms(),
+          api.getParticipants(),
+          api.getWeights(),
+          api.getAuditLogs(),
+          api.getBackups()
+        ]);
+
+        if (dbUsers.status === 'fulfilled' && dbUsers.value.length > 0) {
+          setUsers(dbUsers.value);
+          // Sync current user role/data if exists
+          const matched = dbUsers.value.find(u => u.username === 'admin') || dbUsers.value[0];
+          setCurrentUser(matched);
+        }
+        if (dbYears.status === 'fulfilled' && dbYears.value.length > 0) {
+          setAcademicYears(dbYears.value);
+        }
+        if (dbFaculties.status === 'fulfilled' && dbFaculties.value.length > 0) {
+          setFaculties(dbFaculties.value);
+        }
+        if (dbProdis.status === 'fulfilled' && dbProdis.value.length > 0) {
+          setStudyPrograms(dbProdis.value);
+        }
+        if (dbParticipants.status === 'fulfilled' && dbParticipants.value.length > 0) {
+          setParticipants(dbParticipants.value);
+        }
+        if (dbWeights.status === 'fulfilled') {
+          setWeights(dbWeights.value);
+        }
+        if (dbAudits.status === 'fulfilled' && dbAudits.value.length > 0) {
+          setAuditLogs(dbAudits.value as any);
+        }
+        if (dbBackups.status === 'fulfilled' && dbBackups.value.length > 0) {
+          setBackups(dbBackups.value);
+        }
+        setIsDbLoaded(true);
+      } catch (err) {
+        console.warn('Initial fetch from Cloud SQL had some fallback:', err);
+      }
+    }
+    loadDataFromDb();
+  }, []);
 
   const addAuditLog = (log: Omit<SelectionAuditLog, 'id' | 'timestamp'>) => {
     const now = new Date();
@@ -77,6 +138,7 @@ export default function App() {
       ipAddress: log.ipAddress || '10.14.20.101',
     };
     setAuditLogs((prev) => [newLog, ...prev]);
+    api.createAuditLog(log).catch(err => console.error('Failed to log audit to DB:', err));
   };
 
   // Toast notification state
@@ -133,23 +195,28 @@ export default function App() {
   };
 
   // Participant Handlers
-  const handleAddParticipant = (newP: Omit<Participant, 'id'>) => {
-    const nextId = participants.length > 0 ? Math.max(...participants.map((p) => p.id)) + 1 : 1;
-    const itemWithId: Participant = {
-      ...newP,
-      id: nextId
-    };
-    setParticipants([itemWithId, ...participants]);
-    showToast('success', 'Peserta Ditambahkan', `Calon mahasiswa ${newP.name} berhasil disimpan ke database.`);
+  const handleAddParticipant = async (newP: Omit<Participant, 'id'>) => {
+    try {
+      const created = await api.createParticipant(newP);
+      setParticipants((prev) => [created, ...prev]);
+      showToast('success', 'Peserta Ditambahkan', `Calon mahasiswa ${newP.name} berhasil disimpan ke database.`);
+    } catch (e) {
+      const nextId = participants.length > 0 ? Math.max(...participants.map((p) => p.id)) + 1 : 1;
+      const itemWithId: Participant = { ...newP, id: nextId };
+      setParticipants([itemWithId, ...participants]);
+      showToast('success', 'Peserta Ditambahkan', `Calon mahasiswa ${newP.name} berhasil disimpan.`);
+    }
   };
 
-  const handleUpdateParticipant = (updated: Participant) => {
+  const handleUpdateParticipant = async (updated: Participant) => {
     setParticipants(participants.map((p) => (p.id === updated.id ? updated : p)));
+    api.updateParticipant(updated).catch(err => console.error('Failed to sync participant update:', err));
     showToast('success', 'Data Diperbarui', `Data peserta ${updated.name} berhasil diperbarui.`);
   };
 
-  const handleBatchUpdateParticipants = (updatedList: Participant[]) => {
+  const handleBatchUpdateParticipants = async (updatedList: Participant[]) => {
     setParticipants(updatedList);
+    api.batchUpdateParticipants(updatedList).catch(err => console.error('Failed to batch sync:', err));
     showToast(
       'success',
       'Penetapan Hasil Berhasil',
@@ -157,9 +224,10 @@ export default function App() {
     );
   };
 
-  const handleDeleteParticipant = (id: number) => {
+  const handleDeleteParticipant = async (id: number) => {
     const target = participants.find((p) => p.id === id);
     setParticipants(participants.filter((p) => p.id !== id));
+    api.deleteParticipant(id).catch(err => console.error('Failed to delete participant:', err));
     showToast('success', 'Peserta Dihapus', `Data peserta ${target?.name || ''} telah dihapus dari database.`);
   };
 
@@ -352,6 +420,7 @@ export default function App() {
     const oldWeightsStr = `${weights.utbkWeight}/${weights.interviewWeight}/${weights.surveyWeight}/${weights.affirmationWeight}`;
     const newWeightsStr = `${newWeights.utbkWeight}/${newWeights.interviewWeight}/${newWeights.surveyWeight}/${newWeights.affirmationWeight}`;
     setWeights(newWeights);
+    api.updateWeights(newWeights).catch(err => console.error('Failed to update weights in DB:', err));
     addAuditLog({
       module: 'BOBOT_SELEKSI',
       action: 'Pembaruan Formula Bobot Seleksi',

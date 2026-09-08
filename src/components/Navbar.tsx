@@ -52,8 +52,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-yellow-100 text-yellow-800 border border-yellow-300/60 uppercase">
                   T.A 2026/2027
                 </span>
+                <span className="hidden md:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-300" title="Supabase Client (@supabase/supabase-js) & PostgreSQL Active">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Supabase & Cloud SQL
+                </span>
               </div>
-              <p className="text-[10px] text-slate-500 hidden sm:block font-medium">Universitas Prof. Dr. Hazairin, SH &bull; Bengkulu</p>
+              <p className="text-[10px] text-slate-500 hidden sm:block font-medium">Universitas Prof. Dr. Hazairin, SH &bull; Supabase Client &bull; Cloud SQL asia-southeast1</p>
             </div>
           </div>
         </div>
