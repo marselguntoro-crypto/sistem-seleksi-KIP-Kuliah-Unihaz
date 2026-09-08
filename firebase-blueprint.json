@@ -1,0 +1,157 @@
+{
+  "entities": {
+    "Participant": {
+      "title": "Participant",
+      "description": "KIP-K applicant record with biodata, documents, scores, and selection status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "kipKNumber": { "type": "string" },
+        "fullName": { "type": "string" },
+        "nisn": { "type": "string" },
+        "nik": { "type": "string" },
+        "facultyId": { "type": "string" },
+        "studyProgramId": { "type": "string" },
+        "academicYearId": { "type": "string" },
+        "schoolOrigin": { "type": "string" },
+        "schoolType": { "type": "string" },
+        "gpa": { "type": "number" },
+        "fatherName": { "type": "string" },
+        "motherName": { "type": "string" },
+        "fatherIncome": { "type": "number" },
+        "motherIncome": { "type": "number" },
+        "dependentCount": { "type": "number" },
+        "houseOwnership": { "type": "string" },
+        "electricityPower": { "type": "number" },
+        "documentStatus": { "type": "string" },
+        "surveyStatus": { "type": "string" },
+        "selectionStatus": { "type": "string" },
+        "utbkScore": { "type": "number" },
+        "surveyScore": { "type": "number" },
+        "interviewScore": { "type": "number" },
+        "finalScore": { "type": "number" },
+        "rank": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["fullName", "kipKNumber", "studyProgramId", "academicYearId"]
+    },
+    "AcademicYear": {
+      "title": "AcademicYear",
+      "description": "Academic year registration period",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "year": { "type": "string" },
+        "semester": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "totalQuota": { "type": "number" }
+      },
+      "required": ["year", "semester", "isActive"]
+    },
+    "Faculty": {
+      "title": "Faculty",
+      "description": "UNIHAZ faculty department",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "deanName": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["code", "name"]
+    },
+    "StudyProgram": {
+      "title": "StudyProgram",
+      "description": "Academic study program / major with KIP-K quota",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "facultyId": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "level": { "type": "string" },
+        "quota": { "type": "number" },
+        "accreditation": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["facultyId", "code", "name", "quota"]
+    },
+    "SelectionWeight": {
+      "title": "SelectionWeight",
+      "description": "Scoring formula percentages for KIP-K ranking",
+      "type": "object",
+      "properties": {
+        "utbk": { "type": "number" },
+        "interview": { "type": "number" },
+        "survey": { "type": "number" },
+        "academicAchievement": { "type": "number" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["utbk", "interview", "survey"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Institutional activity log tracking actions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "participantName": { "type": "string" },
+        "action": { "type": "string" },
+        "module": { "type": "string" },
+        "changedBy": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "details": { "type": "string" },
+        "severity": { "type": "string" }
+      },
+      "required": ["action", "changedBy", "timestamp"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Operator or administrator account",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "username": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "lastLogin": { "type": "string" }
+      },
+      "required": ["username", "email", "role"]
+    }
+  },
+  "firestore": {
+    "/participants/{participantId}": {
+      "schema": "Participant",
+      "description": "Collection of applicants and selection scores"
+    },
+    "/academic_years/{yearId}": {
+      "schema": "AcademicYear",
+      "description": "Academic year periods"
+    },
+    "/faculties/{facultyId}": {
+      "schema": "Faculty",
+      "description": "Faculties in UNIHAZ"
+    },
+    "/study_programs/{prodiId}": {
+      "schema": "StudyProgram",
+      "description": "Study programs and quotas"
+    },
+    "/settings/selection_weights": {
+      "schema": "SelectionWeight",
+      "description": "Current active scoring formula weights"
+    },
+    "/audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Audit trails for selection actions"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "System operator profiles"
+    }
+  }
+}

@@ -8,205 +8,344 @@ import {
   SelectionAuditLog, 
   DatabaseBackupItem 
 } from '../types';
+import {
+  fsGetParticipants,
+  fsCreateParticipant,
+  fsUpdateParticipant,
+  fsBatchUpdateParticipants,
+  fsDeleteParticipant,
+  fsGetAcademicYears,
+  fsCreateAcademicYear,
+  fsUpdateAcademicYear,
+  fsDeleteAcademicYear,
+  fsGetFaculties,
+  fsCreateFaculty,
+  fsUpdateFaculty,
+  fsDeleteFaculty,
+  fsGetStudyPrograms,
+  fsCreateStudyProgram,
+  fsUpdateStudyProgram,
+  fsDeleteStudyProgram,
+  fsGetWeights,
+  fsUpdateWeights,
+  fsGetAuditLogs,
+  fsCreateAuditLog,
+  fsGetUsers,
+  fsCreateUser,
+  fsUpdateUser,
+  fsDeleteUser,
+  fsGetBackups,
+  fsCreateBackup,
+  fsDeleteBackup,
+  seedFirestoreIfEmpty
+} from '../services/firestoreSync';
+
+// Flag to check if we can reach the local Express server
+let serverReachable: boolean | null = null;
+
+async function isServerAvailable(): Promise<boolean> {
+  if (serverReachable !== null) return serverReachable;
+  try {
+    const res = await fetch('/api/health', { method: 'GET', cache: 'no-store' });
+    serverReachable = res.ok;
+  } catch {
+    serverReachable = false;
+  }
+  return serverReachable;
+}
 
 export const api = {
+  // Ensure Cloud Firestore is seeded on start
+  async init() {
+    await seedFirestoreIfEmpty();
+  },
+
   // Users
   async getUsers(): Promise<User[]> {
-    const res = await fetch('/api/users');
-    if (!res.ok) throw new Error('Gagal mengambil users');
-    return res.json();
+    if (await isServerAvailable()) {
+      try {
+        const res = await fetch('/api/users');
+        if (res.ok) return await res.json();
+      } catch (err) {
+        console.warn('Local API failed, falling back to Firestore for users:', err);
+      }
+    }
+    return fsGetUsers();
   },
   async createUser(data: Omit<User, 'id'>): Promise<User> {
-    const res = await fetch('/api/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Gagal membuat user');
-    return res.json();
+    const fsPromise = fsCreateUser(data);
+    if (await isServerAvailable()) {
+      try {
+        const res = await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        if (res.ok) {
+          const resData = await res.json();
+          fsCreateUser(resData).catch(() => {});
+          return resData;
+        }
+      } catch {}
+    }
+    return fsPromise;
   },
   async updateUser(user: User): Promise<User> {
-    const res = await fetch(`/api/users/${user.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(user),
-    });
-    if (!res.ok) throw new Error('Gagal memperbarui user');
-    return res.json();
+    const fsPromise = fsUpdateUser(user);
+    if (await isServerAvailable()) {
+      try {
+        fetch(`/api/users/${user.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(user),
+        }).catch(() => {});
+      } catch {}
+    }
+    return fsPromise;
   },
   async deleteUser(id: number): Promise<void> {
-    await fetch(`/api/users/${id}`, { method: 'DELETE' });
+    await fsDeleteUser(id);
+    if (await isServerAvailable()) {
+      fetch(`/api/users/${id}`, { method: 'DELETE' }).catch(() => {});
+    }
   },
 
   // Academic Years
   async getAcademicYears(): Promise<AcademicYear[]> {
-    const res = await fetch('/api/academic-years');
-    if (!res.ok) throw new Error('Gagal mengambil academic years');
-    return res.json();
+    if (await isServerAvailable()) {
+      try {
+        const res = await fetch('/api/academic-years');
+        if (res.ok) return await res.json();
+      } catch {}
+    }
+    return fsGetAcademicYears();
   },
   async createAcademicYear(data: Omit<AcademicYear, 'id'>): Promise<AcademicYear> {
-    const res = await fetch('/api/academic-years', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Gagal membuat tahun akademik');
-    return res.json();
+    const fsPromise = fsCreateAcademicYear(data);
+    if (await isServerAvailable()) {
+      fetch('/api/academic-years', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).catch(() => {});
+    }
+    return fsPromise;
   },
   async updateAcademicYear(data: AcademicYear): Promise<AcademicYear> {
-    const res = await fetch(`/api/academic-years/${data.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Gagal memperbarui tahun akademik');
-    return res.json();
+    const fsPromise = fsUpdateAcademicYear(data);
+    if (await isServerAvailable()) {
+      fetch(`/api/academic-years/${data.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).catch(() => {});
+    }
+    return fsPromise;
   },
   async deleteAcademicYear(id: number): Promise<void> {
-    await fetch(`/api/academic-years/${id}`, { method: 'DELETE' });
+    await fsDeleteAcademicYear(id);
+    if (await isServerAvailable()) {
+      fetch(`/api/academic-years/${id}`, { method: 'DELETE' }).catch(() => {});
+    }
   },
 
   // Faculties
   async getFaculties(): Promise<Faculty[]> {
-    const res = await fetch('/api/faculties');
-    if (!res.ok) throw new Error('Gagal mengambil fakultas');
-    return res.json();
+    if (await isServerAvailable()) {
+      try {
+        const res = await fetch('/api/faculties');
+        if (res.ok) return await res.json();
+      } catch {}
+    }
+    return fsGetFaculties();
   },
   async createFaculty(data: Omit<Faculty, 'id'>): Promise<Faculty> {
-    const res = await fetch('/api/faculties', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Gagal membuat fakultas');
-    return res.json();
+    const fsPromise = fsCreateFaculty(data);
+    if (await isServerAvailable()) {
+      fetch('/api/faculties', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).catch(() => {});
+    }
+    return fsPromise;
   },
   async updateFaculty(data: Faculty): Promise<Faculty> {
-    const res = await fetch(`/api/faculties/${data.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Gagal memperbarui fakultas');
-    return res.json();
+    const fsPromise = fsUpdateFaculty(data);
+    if (await isServerAvailable()) {
+      fetch(`/api/faculties/${data.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).catch(() => {});
+    }
+    return fsPromise;
   },
   async deleteFaculty(id: number): Promise<void> {
-    await fetch(`/api/faculties/${id}`, { method: 'DELETE' });
+    await fsDeleteFaculty(id);
+    if (await isServerAvailable()) {
+      fetch(`/api/faculties/${id}`, { method: 'DELETE' }).catch(() => {});
+    }
   },
 
   // Study Programs
   async getStudyPrograms(): Promise<StudyProgram[]> {
-    const res = await fetch('/api/study-programs');
-    if (!res.ok) throw new Error('Gagal mengambil program studi');
-    return res.json();
+    if (await isServerAvailable()) {
+      try {
+        const res = await fetch('/api/study-programs');
+        if (res.ok) return await res.json();
+      } catch {}
+    }
+    return fsGetStudyPrograms();
   },
   async createStudyProgram(data: Omit<StudyProgram, 'id'>): Promise<StudyProgram> {
-    const res = await fetch('/api/study-programs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Gagal membuat program studi');
-    return res.json();
+    const fsPromise = fsCreateStudyProgram(data);
+    if (await isServerAvailable()) {
+      fetch('/api/study-programs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).catch(() => {});
+    }
+    return fsPromise;
   },
   async updateStudyProgram(data: StudyProgram): Promise<StudyProgram> {
-    const res = await fetch(`/api/study-programs/${data.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Gagal memperbarui program studi');
-    return res.json();
+    const fsPromise = fsUpdateStudyProgram(data);
+    if (await isServerAvailable()) {
+      fetch(`/api/study-programs/${data.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).catch(() => {});
+    }
+    return fsPromise;
   },
   async deleteStudyProgram(id: number): Promise<void> {
-    await fetch(`/api/study-programs/${id}`, { method: 'DELETE' });
+    await fsDeleteStudyProgram(id);
+    if (await isServerAvailable()) {
+      fetch(`/api/study-programs/${id}`, { method: 'DELETE' }).catch(() => {});
+    }
   },
 
   // Participants
   async getParticipants(): Promise<Participant[]> {
-    const res = await fetch('/api/participants');
-    if (!res.ok) throw new Error('Gagal mengambil peserta');
-    return res.json();
+    if (await isServerAvailable()) {
+      try {
+        const res = await fetch('/api/participants');
+        if (res.ok) return await res.json();
+      } catch {}
+    }
+    return fsGetParticipants();
   },
   async createParticipant(data: Omit<Participant, 'id'>): Promise<Participant> {
-    const res = await fetch('/api/participants', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Gagal membuat peserta');
-    return res.json();
+    const fsPromise = fsCreateParticipant(data);
+    if (await isServerAvailable()) {
+      fetch('/api/participants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).catch(() => {});
+    }
+    return fsPromise;
   },
   async updateParticipant(data: Participant): Promise<Participant> {
-    const res = await fetch(`/api/participants/${data.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Gagal memperbarui peserta');
-    return res.json();
+    const fsPromise = fsUpdateParticipant(data);
+    if (await isServerAvailable()) {
+      fetch(`/api/participants/${data.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).catch(() => {});
+    }
+    return fsPromise;
   },
   async batchUpdateParticipants(participants: Participant[]): Promise<Participant[]> {
-    const res = await fetch('/api/participants/batch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ participants }),
-    });
-    if (!res.ok) throw new Error('Gagal batch update peserta');
-    return res.json();
+    const fsPromise = fsBatchUpdateParticipants(participants);
+    if (await isServerAvailable()) {
+      fetch('/api/participants/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participants }),
+      }).catch(() => {});
+    }
+    return fsPromise;
   },
   async deleteParticipant(id: number): Promise<void> {
-    await fetch(`/api/participants/${id}`, { method: 'DELETE' });
+    await fsDeleteParticipant(id);
+    if (await isServerAvailable()) {
+      fetch(`/api/participants/${id}`, { method: 'DELETE' }).catch(() => {});
+    }
   },
 
   // Selection Weights
   async getWeights(): Promise<SelectionWeights> {
-    const res = await fetch('/api/selection-weights');
-    if (!res.ok) throw new Error('Gagal mengambil bobot');
-    return res.json();
+    if (await isServerAvailable()) {
+      try {
+        const res = await fetch('/api/selection-weights');
+        if (res.ok) return await res.json();
+      } catch {}
+    }
+    return fsGetWeights();
   },
   async updateWeights(data: SelectionWeights): Promise<SelectionWeights> {
-    const res = await fetch('/api/selection-weights', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Gagal memperbarui bobot');
-    return res.json();
+    const fsPromise = fsUpdateWeights(data);
+    if (await isServerAvailable()) {
+      fetch('/api/selection-weights', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).catch(() => {});
+    }
+    return fsPromise;
   },
 
   // Audit Logs
   async getAuditLogs(): Promise<SelectionAuditLog[]> {
-    const res = await fetch('/api/audit-logs');
-    if (!res.ok) throw new Error('Gagal mengambil audit logs');
-    return res.json();
+    if (await isServerAvailable()) {
+      try {
+        const res = await fetch('/api/audit-logs');
+        if (res.ok) return await res.json();
+      } catch {}
+    }
+    return fsGetAuditLogs();
   },
   async createAuditLog(log: Omit<SelectionAuditLog, 'id' | 'timestamp'>): Promise<SelectionAuditLog> {
-    const res = await fetch('/api/audit-logs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(log),
-    });
-    if (!res.ok) throw new Error('Gagal mencatat audit log');
-    return res.json();
+    const fsPromise = fsCreateAuditLog(log);
+    if (await isServerAvailable()) {
+      fetch('/api/audit-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(log),
+      }).catch(() => {});
+    }
+    return fsPromise;
   },
 
   // Backups
   async getBackups(): Promise<DatabaseBackupItem[]> {
-    const res = await fetch('/api/backups');
-    if (!res.ok) throw new Error('Gagal mengambil backups');
-    return res.json();
+    if (await isServerAvailable()) {
+      try {
+        const res = await fetch('/api/backups');
+        if (res.ok) return await res.json();
+      } catch {}
+    }
+    return fsGetBackups();
   },
   async createBackup(data: DatabaseBackupItem): Promise<DatabaseBackupItem> {
-    const res = await fetch('/api/backups', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Gagal mencatat backup');
-    return res.json();
+    const fsPromise = fsCreateBackup(data);
+    if (await isServerAvailable()) {
+      fetch('/api/backups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).catch(() => {});
+    }
+    return fsPromise;
   },
   async deleteBackup(id: string): Promise<void> {
-    await fetch(`/api/backups/${id}`, { method: 'DELETE' });
+    await fsDeleteBackup(id);
+    if (await isServerAvailable()) {
+      fetch(`/api/backups/${id}`, { method: 'DELETE' }).catch(() => {});
+    }
   },
 };

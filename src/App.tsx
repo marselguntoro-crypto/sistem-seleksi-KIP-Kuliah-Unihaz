@@ -23,6 +23,7 @@ import {
 import { INITIAL_AUDIT_LOGS, INITIAL_BACKUPS } from './data/initialAuditAndBackup';
 import { DEFAULT_SELECTION_WEIGHTS, calculateParticipantFinalScore } from './utils/selectionUtils';
 import { api } from './utils/api';
+import { subscribeToParticipants, subscribeToWeights, subscribeToAuditLogs } from './services/firestoreSync';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { DashboardView } from './components/DashboardView';
@@ -77,10 +78,13 @@ export default function App() {
   const [backups, setBackups] = useState<DatabaseBackupItem[]>(INITIAL_BACKUPS);
   const [isDbLoaded, setIsDbLoaded] = useState(false);
 
-  // Load initial data from PostgreSQL Cloud SQL database
+  // Load initial data and subscribe to real-time Cloud Firestore updates
   useEffect(() => {
+    let isMounted = true;
+
     async function loadDataFromDb() {
       try {
+        await api.init();
         const [
           dbUsers,
           dbYears,
@@ -100,6 +104,8 @@ export default function App() {
           api.getAuditLogs(),
           api.getBackups()
         ]);
+
+        if (!isMounted) return;
 
         if (dbUsers.status === 'fulfilled' && dbUsers.value.length > 0) {
           setUsers(dbUsers.value);
@@ -133,10 +139,36 @@ export default function App() {
         }
         setIsDbLoaded(true);
       } catch (err) {
-        console.warn('Initial fetch from Cloud SQL had some fallback:', err);
+        console.warn('Initial fetch had some fallback:', err);
       }
     }
     loadDataFromDb();
+
+    // Attach real-time cloud listeners so edits made by any team member on Vercel appear instantly
+    const unsubParticipants = subscribeToParticipants((liveList) => {
+      if (isMounted && liveList.length > 0) {
+        setParticipants(liveList);
+      }
+    });
+
+    const unsubWeights = subscribeToWeights((liveWeights) => {
+      if (isMounted && liveWeights) {
+        setWeights(liveWeights);
+      }
+    });
+
+    const unsubAudits = subscribeToAuditLogs((liveLogs) => {
+      if (isMounted && liveLogs.length > 0) {
+        setAuditLogs(liveLogs);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubParticipants();
+      unsubWeights();
+      unsubAudits();
+    };
   }, []);
 
   const addAuditLog = (log: Omit<SelectionAuditLog, 'id' | 'timestamp'>) => {
