@@ -37,7 +37,9 @@ import {
   fsGetBackups,
   fsCreateBackup,
   fsDeleteBackup,
-  seedFirestoreIfEmpty
+  seedFirestoreIfEmpty,
+  fsBatchDeleteParticipants,
+  clearAllDummyParticipants
 } from '../services/firestoreSync';
 
 // Flag to check if we can reach the local Express server
@@ -275,6 +277,28 @@ export const api = {
     if (await isServerAvailable()) {
       fetch(`/api/participants/${id}`, { method: 'DELETE' }).catch(() => {});
     }
+  },
+  async batchDeleteParticipants(ids: number[]): Promise<void> {
+    if (!ids || ids.length === 0) return;
+    try {
+      await fsBatchDeleteParticipants(ids);
+    } catch (e) {
+      console.warn('Firestore batch delete error:', e);
+    }
+    if (await isServerAvailable()) {
+      try {
+        await fetch('/api/participants/batch-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids }),
+        });
+      } catch (err) {
+        console.warn('Backend batch delete error:', err);
+      }
+    }
+  },
+  async purgeDummyParticipants(): Promise<number> {
+    return clearAllDummyParticipants();
   },
 
   // Selection Weights

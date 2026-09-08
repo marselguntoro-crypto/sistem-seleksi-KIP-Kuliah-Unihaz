@@ -367,19 +367,8 @@ export const AcademicYearsView: React.FC<AcademicYearsViewProps> = ({
                         </button>
                         <button
                           onClick={() => setDeleteCandidate(item)}
-                          disabled={item.isActive || (item.participantsCount && item.participantsCount > 0) ? true : false}
-                          className={`p-1.5 rounded-lg border transition ${
-                            item.isActive || (item.participantsCount && item.participantsCount > 0)
-                              ? 'border-slate-100 text-slate-300 cursor-not-allowed'
-                              : 'border-slate-200 text-slate-600 hover:text-rose-600 hover:bg-rose-50 cursor-pointer'
-                          }`}
-                          title={
-                            item.isActive
-                              ? 'Tidak dapat menghapus tahun akademik aktif'
-                              : item.participantsCount && item.participantsCount > 0
-                              ? 'Tidak dapat menghapus tahun akademik yang memiliki data peserta'
-                              : 'Hapus Tahun Akademik'
-                          }
+                          className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-rose-600 hover:bg-rose-50 cursor-pointer transition"
+                          title="Hapus Tahun Akademik"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>

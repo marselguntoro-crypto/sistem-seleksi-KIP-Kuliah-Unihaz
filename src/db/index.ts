@@ -7,8 +7,15 @@ declare global {
   var _postgresPool: Pool | undefined;
 }
 
+export const isDatabaseConfigured = Boolean(process.env.SQL_HOST && process.env.SQL_DB_NAME);
+
 // Function to create or retrieve the connection pool using the Object Method.
-export const createPool = () => {
+export const createPool = (): Pool => {
+  if (!isDatabaseConfigured) {
+    return new Proxy({} as Pool, {
+      get: () => () => ({ rows: [] }),
+    });
+  }
   if (!global._postgresPool) {
     global._postgresPool = new Pool({
       host: process.env.SQL_HOST,
@@ -30,5 +37,49 @@ export const createPool = () => {
 // Create or retrieve the pool instance.
 export const pool = createPool();
 
-// Initialize Drizzle with the pool and schema.
-export const db = drizzle(pool, { schema });
+// Initialize Drizzle with the pool and schema if configured.
+let dbInstance: any;
+if (isDatabaseConfigured) {
+  try {
+    dbInstance = drizzle(pool, { schema });
+  } catch (err) {
+    console.warn('[AI Studio] Cloud SQL connection error, using mock:', err);
+  }
+}
+
+if (!dbInstance) {
+  const noOp = {
+    findMany: async () => [],
+    findFirst: async () => null,
+    findUnique: async () => null,
+    create: async (d: any) => d?.data ?? {},
+    update: async (d: any) => d?.data ?? {},
+    delete: async () => ({})
+  };
+  dbInstance = new Proxy({}, {
+    get: (_, prop) => prop === 'query'
+      ? new Proxy({}, { get: () => noOp })
+      : () => ({
+          from: () => ({
+            orderBy: () => Promise.resolve([]),
+            limit: () => Promise.resolve([]),
+            where: () => Promise.resolve([]),
+            then: (resolve: any) => Promise.resolve([]).then(resolve)
+          }),
+          values: () => ({
+            returning: () => Promise.resolve([{ id: 1 }]),
+            onConflictDoNothing: () => Promise.resolve([])
+          }),
+          set: () => ({
+            where: () => ({
+              returning: () => Promise.resolve([{ id: 1 }])
+            })
+          }),
+          where: () => Promise.resolve([]),
+          execute: () => Promise.resolve([])
+        })
+  });
+}
+
+export const db = dbInstance;
+

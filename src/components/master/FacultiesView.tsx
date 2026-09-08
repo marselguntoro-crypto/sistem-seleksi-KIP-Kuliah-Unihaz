@@ -355,17 +355,8 @@ export const FacultiesView: React.FC<FacultiesViewProps> = ({
                           </button>
                           <button
                             onClick={() => setDeleteCandidate(item)}
-                            disabled={prodiCount > 0}
-                            className={`p-1.5 rounded-lg border transition ${
-                              prodiCount > 0
-                                ? 'border-slate-100 text-slate-300 cursor-not-allowed'
-                                : 'border-slate-200 text-slate-600 hover:text-rose-600 hover:bg-rose-50 cursor-pointer'
-                            }`}
-                            title={
-                              prodiCount > 0
-                                ? `Dilarang menghapus: Fakultas masih memiliki ${prodiCount} Program Studi aktif`
-                                : 'Hapus Fakultas'
-                            }
+                            className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-rose-600 hover:bg-rose-50 cursor-pointer transition"
+                            title="Hapus Fakultas"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

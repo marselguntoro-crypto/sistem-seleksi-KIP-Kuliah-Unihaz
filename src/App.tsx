@@ -133,7 +133,7 @@ export default function App() {
         if (dbProdis.status === 'fulfilled' && dbProdis.value.length > 0) {
           setStudyPrograms(dbProdis.value);
         }
-        if (dbParticipants.status === 'fulfilled' && dbParticipants.value.length > 0) {
+        if (dbParticipants.status === 'fulfilled') {
           setParticipants(dbParticipants.value);
         }
         if (dbWeights.status === 'fulfilled') {
@@ -154,7 +154,7 @@ export default function App() {
 
     // Attach real-time cloud listeners so edits made by any team member on Vercel appear instantly
     const unsubParticipants = subscribeToParticipants((liveList) => {
-      if (isMounted && liveList.length > 0) {
+      if (isMounted) {
         setParticipants(liveList);
       }
     });
@@ -239,6 +239,30 @@ export default function App() {
     }, 4500);
   };
 
+  // Automatically derive ranking list from current participants
+  useEffect(() => {
+    const scoreItems: ParticipantScoreItem[] = participants.map((p) => ({
+      rank: p.rank || 1,
+      name: p.name,
+      regNumber: p.regNumber,
+      firstChoice: p.firstChoiceProdiName || 'Belum Memilih',
+      secondChoice: p.secondChoiceProdiName || 'Belum Memilih',
+      utbkScore: p.utbkScore || 0,
+      interviewScore: p.interviewScore || 0,
+      surveyScore: p.surveyScore || 0,
+      finalScore: p.finalScore || 0,
+      status: p.selectionStatus || 'Belum Diproses'
+    }));
+
+    // Sort DESC by finalScore
+    scoreItems.sort((a, b) => b.finalScore - a.finalScore);
+    const reRanked = scoreItems.map((item, idx) => ({
+      ...item,
+      rank: idx + 1
+    }));
+    setRankings(reRanked);
+  }, [participants]);
+
   const handleRestrictedAttempt = (moduleName: string) => {
     showToast(
       'error',
@@ -249,30 +273,43 @@ export default function App() {
 
   const handleRunRecalculate = () => {
     setIsRecalculating(true);
-    showToast('success', 'SelectionCalculationService Dipicu', 'Menghitung ulang skor akhir berdasarkan bobot: UTBK (30%), Wawancara (40%), Survey (30%)...');
+    showToast(
+      'success',
+      'SelectionCalculationService Dipicu',
+      `Menghitung ulang skor akhir berdasarkan bobot: UTBK (${weights.utbkWeight}%), Wawancara (${weights.interviewWeight}%), Survey (${weights.surveyWeight}%), Afirmasi (${weights.affirmationWeight}%)...`
+    );
 
     setTimeout(() => {
-      // Recalculate scores
-      const updated = rankings.map((item) => {
-        const calculated =
-          (item.utbkScore * 0.3) +
-          (item.interviewScore * 0.4) +
-          (item.surveyScore * 0.3);
+      const totalWeight = weights.utbkWeight + weights.interviewWeight + weights.surveyWeight + weights.affirmationWeight;
+      const updatedParticipants = participants.map((p) => {
+        const utbk = p.utbkScore || 0;
+        const interview = p.interviewScore || 0;
+        const survey = p.surveyScore || 0;
+        const affirmation = p.affirmationScore || 0;
+
+        let finalScore = 0;
+        if (totalWeight > 0) {
+          finalScore =
+            (utbk * weights.utbkWeight +
+              interview * weights.interviewWeight +
+              survey * weights.surveyWeight +
+              affirmation * weights.affirmationWeight) /
+            totalWeight;
+        }
         return {
-          ...item,
-          finalScore: parseFloat(calculated.toFixed(2))
+          ...p,
+          finalScore: parseFloat(finalScore.toFixed(2))
         };
       });
 
       // Sort DESC
-      updated.sort((a, b) => b.finalScore - a.finalScore);
-      // Reassign ranks
-      const reRanked = updated.map((item, idx) => ({
-        ...item,
+      updatedParticipants.sort((a, b) => (b.finalScore || 0) - (a.finalScore || 0));
+      const reRanked = updatedParticipants.map((p, idx) => ({
+        ...p,
         rank: idx + 1
       }));
 
-      setRankings(reRanked);
+      setParticipants(reRanked);
       setIsRecalculating(false);
       showToast('success', 'Kalkulasi Selesai', 'Peringkat dan nilai akhir peserta berhasil diperbarui.');
     }, 800);
@@ -310,9 +347,16 @@ export default function App() {
 
   const handleDeleteParticipant = async (id: number) => {
     const target = participants.find((p) => p.id === id);
-    setParticipants(participants.filter((p) => p.id !== id));
+    setParticipants((prev) => prev.filter((p) => p.id !== id));
     api.deleteParticipant(id).catch(err => console.error('Failed to delete participant:', err));
     showToast('success', 'Peserta Dihapus', `Data peserta ${target?.name || ''} telah dihapus dari database.`);
+  };
+
+  const handleBatchDeleteParticipants = async (ids: number[]) => {
+    if (ids.length === 0) return;
+    setParticipants((prev) => prev.filter((p) => !ids.includes(p.id)));
+    api.batchDeleteParticipants(ids).catch(err => console.error('Failed to batch delete participants:', err));
+    showToast('success', 'Hapus Massal Berhasil', `Sebanyak ${ids.length} data peserta berhasil dihapus dari sistem.`);
   };
 
   const handleImportSuccess = (newItems: Participant[]) => {
@@ -613,28 +657,32 @@ export default function App() {
 
   // Dynamic Stats computed from live participants and master data
   const dynamicStats: DashboardStats = useMemo(() => {
-    const totalApplicants = participants.length;
-    const completeDocs = participants.filter((p) => p.documentStatus === 'Lengkap').length;
-    const passedApplicants = participants.filter((p) => p.selectionStatus === 'Lulus').length;
-    const totalQuota = studyPrograms.reduce((sum, p) => sum + (p.isActive ? p.quota : 0), 0);
+    const totalParticipants = participants.length;
+    const documentVerificationDone = participants.filter((p) => p.documentStatus === 'Lengkap').length;
+    const passed = participants.filter((p) => p.selectionStatus === 'Lulus').length;
+    const failed = participants.filter((p) => p.selectionStatus === 'Tidak Lulus').length;
+    const reserved = participants.filter((p) => p.selectionStatus === 'Cadangan').length;
+
+    // Fully assessed = has scores for all 3 components
+    const fullyAssessed = participants.filter(
+      (p) => (p.utbkScore || 0) > 0 && (p.interviewScore || 0) > 0 && (p.surveyScore || 0) > 0
+    ).length;
+
+    // Unassessed = has 0 for any of the 3 score components
+    const unassessed = participants.filter(
+      (p) => (p.utbkScore || 0) === 0 || (p.interviewScore || 0) === 0 || (p.surveyScore || 0) === 0
+    ).length;
 
     return {
-      totalApplicants,
-      verifiedDocuments: completeDocs,
-      verifiedPercentage: totalApplicants > 0 ? Math.round((completeDocs / totalApplicants) * 100) : 0,
-      quotaAvailable: totalQuota,
-      quotaAllocated: passedApplicants,
-      utbkCompleted: participants.filter((p) => (p.utbkScore || 0) > 0).length,
-      surveyCompleted: participants.filter((p) => (p.surveyScore || 0) > 0).length,
-      interviewCompleted: participants.filter((p) => (p.interviewScore || 0) > 0).length,
-      statusCounts: {
-        submitted: participants.filter((p) => p.documentStatus === 'Belum Diverifikasi').length,
-        verified: completeDocs,
-        revision: participants.filter((p) => p.documentStatus === 'Perlu Perbaikan').length,
-        rejected: participants.filter((p) => p.documentStatus === 'Ditolak').length
-      }
+      totalParticipants,
+      unassessed,
+      documentVerificationDone,
+      fullyAssessed,
+      passed,
+      failed,
+      reserved
     };
-  }, [participants, studyPrograms]);
+  }, [participants]);
 
   // If logged out, render the authentic Laravel Login page
   if (!currentUser) {
@@ -916,6 +964,7 @@ export default function App() {
                 onAdd={handleAddParticipant}
                 onUpdate={handleUpdateParticipant}
                 onDelete={handleDeleteParticipant}
+                onBatchDelete={handleBatchDeleteParticipants}
                 onNavigateToImport={() => setActiveRoute('import')}
               />
             ) : (
@@ -926,6 +975,9 @@ export default function App() {
                 onNavigate={setActiveRoute}
                 onRunRecalculate={handleRunRecalculate}
                 isRecalculating={isRecalculating}
+                participants={participants}
+                studyPrograms={studyPrograms}
+                weights={weights}
               />
             )}
           </div>

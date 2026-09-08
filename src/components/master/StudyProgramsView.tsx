@@ -443,17 +443,8 @@ export const StudyProgramsView: React.FC<StudyProgramsViewProps> = ({
                           </button>
                           <button
                             onClick={() => setDeleteCandidate(item)}
-                            disabled={pCount > 0}
-                            className={`p-1.5 rounded-lg border transition ${
-                              pCount > 0
-                                ? 'border-slate-100 text-slate-300 cursor-not-allowed'
-                                : 'border-slate-200 text-slate-600 hover:text-rose-600 hover:bg-rose-50 cursor-pointer'
-                            }`}
-                            title={
-                              pCount > 0
-                                ? `Dilarang menghapus: terdapat ${pCount} peserta yang memilih prodi ini`
-                                : 'Hapus Program Studi'
-                            }
+                            className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-rose-600 hover:bg-rose-50 cursor-pointer transition"
+                            title="Hapus Program Studi"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

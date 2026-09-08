@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
-import { DashboardStats, ParticipantScoreItem, User } from '../types';
+import { DashboardStats, ParticipantScoreItem, User, Participant, StudyProgram, SelectionWeights } from '../types';
 import {
   Users,
   Clock,
@@ -26,6 +26,9 @@ interface DashboardViewProps {
   onNavigate: (route: string) => void;
   onRunRecalculate: () => void;
   isRecalculating: boolean;
+  participants?: Participant[];
+  studyPrograms?: StudyProgram[];
+  weights?: SelectionWeights;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -34,7 +37,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   currentUser,
   onNavigate,
   onRunRecalculate,
-  isRecalculating
+  isRecalculating,
+  participants = [],
+  studyPrograms = [],
+  weights
 }) => {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<string>('ALL');
@@ -51,17 +57,61 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const seleksiInstance = useRef<Chart | null>(null);
   const distribusiInstance = useRef<Chart | null>(null);
 
+  // Helper for progress bar width class without inline styles
+  const getWidthClass = (pct: number) => {
+    if (pct <= 0) return 'w-0';
+    if (pct < 15) return 'w-[10%]';
+    if (pct < 25) return 'w-[20%]';
+    if (pct < 35) return 'w-[30%]';
+    if (pct < 45) return 'w-[40%]';
+    if (pct < 55) return 'w-[50%]';
+    if (pct < 65) return 'w-[60%]';
+    if (pct < 75) return 'w-[70%]';
+    if (pct < 85) return 'w-[80%]';
+    if (pct < 95) return 'w-[90%]';
+    return 'w-full';
+  };
+
+  const total = stats.totalParticipants || 0;
+  const pctUnassessed = total > 0 ? Math.min(100, Math.round((stats.unassessed / total) * 100)) : 0;
+  const pctVerified = total > 0 ? Math.min(100, Math.round((stats.documentVerificationDone / total) * 100)) : 0;
+  const pctAssessed = total > 0 ? Math.min(100, Math.round((stats.fullyAssessed / total) * 100)) : 0;
+  const pctPassed = total > 0 ? Math.min(100, Math.round((stats.passed / total) * 100)) : 0;
+  const pctFailed = total > 0 ? Math.min(100, Math.round((stats.failed / total) * 100)) : 0;
+  const pctReserved = total > 0 ? Math.min(100, Math.round((stats.reserved / total) * 100)) : 0;
+
+  // Dynamic calculations for charts
+  const scoredParticipants = participants.filter((p) => (p.finalScore || 0) > 0);
+  const meanScore =
+    scoredParticipants.length > 0
+      ? (scoredParticipants.reduce((acc, p) => acc + (p.finalScore || 0), 0) / scoredParticipants.length).toFixed(1)
+      : '0.0';
+  const totalQuota = studyPrograms.reduce((sum, sp) => sum + (sp.isActive ? sp.quota : 0), 0);
+
   useEffect(() => {
-    // 1. Chart Peserta per Program Studi
+    // 1. Chart Peserta per Program Studi (Dynamic from participants & master prodi)
     if (prodiChartRef.current) {
       if (prodiInstance.current) prodiInstance.current.destroy();
+
+      const prodiMap = new Map<string, number>();
+      if (studyPrograms && studyPrograms.length > 0) {
+        studyPrograms.forEach((sp) => prodiMap.set(sp.name.replace(/^S1\s+/, ''), 0));
+      }
+      participants.forEach((p) => {
+        const name = (p.firstChoiceProdiName || 'Lainnya').replace(/^S1\s+/, '');
+        prodiMap.set(name, (prodiMap.get(name) || 0) + 1);
+      });
+
+      const prodiLabels = Array.from(prodiMap.keys());
+      const prodiCounts = Array.from(prodiMap.values());
+
       prodiInstance.current = new Chart(prodiChartRef.current, {
         type: 'bar',
         data: {
-          labels: ['Ilmu Hukum', 'Manajemen', 'Akuntansi', 'Informatika', 'Teknik Sipil', 'Agrotek', 'Ilmu Kom.', 'Adm. Publik'],
+          labels: prodiLabels.length > 0 ? prodiLabels : ['Belum Ada Data'],
           datasets: [{
             label: 'Jumlah Calon Mahasiswa',
-            data: [88, 74, 62, 59, 45, 38, 34, 28],
+            data: prodiCounts.length > 0 ? prodiCounts : [0],
             backgroundColor: '#1e3a8a',
             hoverBackgroundColor: '#eab308',
             borderRadius: 4,
@@ -84,7 +134,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             y: {
               beginAtZero: true,
               grid: { color: '#f1f5f9' },
-              ticks: { font: { size: 10 } }
+              ticks: { font: { size: 10 }, stepSize: 1 }
             },
             x: {
               grid: { display: false },
@@ -95,16 +145,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       });
     }
 
-    // 2. Status Pemberkasan Doughnut
+    // 2. Status Pemberkasan Doughnut (Dynamic)
     if (berkasChartRef.current) {
       if (berkasInstance.current) berkasInstance.current.destroy();
+
+      const berkasLengkap = participants.filter((p) => p.documentStatus === 'Lengkap').length;
+      const berkasRevisi = participants.filter((p) => p.documentStatus === 'Perlu Perbaikan').length;
+      const berkasDitolak = participants.filter((p) => p.documentStatus === 'Ditolak').length;
+      const berkasBelum = participants.filter(
+        (p) => !p.documentStatus || p.documentStatus === 'Belum Diverifikasi' || p.documentStatus === 'Draft'
+      ).length;
+
+      const totalBerkas = berkasLengkap + berkasRevisi + berkasDitolak + berkasBelum;
+
       berkasInstance.current = new Chart(berkasChartRef.current, {
         type: 'doughnut',
         data: {
-          labels: ['Berkas Lengkap', 'Perlu Perbaikan', 'Tidak Lengkap', 'Belum Diperiksa'],
+          labels: ['Berkas Lengkap', 'Perlu Perbaikan', 'Ditolak', 'Belum Diperiksa'],
           datasets: [{
-            data: [310, 48, 28, 42],
-            backgroundColor: ['#10b981', '#f59e0b', '#ef4444', '#94a3b8'],
+            data: totalBerkas > 0 ? [berkasLengkap, berkasRevisi, berkasDitolak, berkasBelum] : [0, 0, 0, 1],
+            backgroundColor: totalBerkas > 0 ? ['#10b981', '#f59e0b', '#ef4444', '#94a3b8'] : ['#f1f5f9', '#f1f5f9', '#f1f5f9', '#cbd5e1'],
             borderWidth: 2,
             borderColor: '#ffffff',
           }]
@@ -123,16 +183,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       });
     }
 
-    // 3. Status Seleksi Kelulusan Doughnut
+    // 3. Status Seleksi Kelulusan Doughnut (Dynamic)
     if (seleksiChartRef.current) {
       if (seleksiInstance.current) seleksiInstance.current.destroy();
+
+      const lulusCount = participants.filter((p) => p.selectionStatus === 'Lulus').length;
+      const cadanganCount = participants.filter((p) => p.selectionStatus === 'Cadangan').length;
+      const tidakLulusCount = participants.filter((p) => p.selectionStatus === 'Tidak Lulus').length;
+      const prosesCount = participants.filter(
+        (p) => !p.selectionStatus || p.selectionStatus === 'Belum Diproses'
+      ).length;
+
+      const totalSeleksi = lulusCount + cadanganCount + tidakLulusCount + prosesCount;
+
       seleksiInstance.current = new Chart(seleksiChartRef.current, {
         type: 'doughnut',
         data: {
           labels: ['Lulus (Kuota KIP)', 'Cadangan', 'Tidak Lulus', 'Proses Penilaian'],
           datasets: [{
-            data: [120, 35, 195, 78],
-            backgroundColor: ['#059669', '#d97706', '#dc2626', '#3b82f6'],
+            data: totalSeleksi > 0 ? [lulusCount, cadanganCount, tidakLulusCount, prosesCount] : [0, 0, 0, 1],
+            backgroundColor: totalSeleksi > 0 ? ['#059669', '#d97706', '#dc2626', '#3b82f6'] : ['#f1f5f9', '#f1f5f9', '#f1f5f9', '#cbd5e1'],
             borderWidth: 2,
             borderColor: '#ffffff',
           }]
@@ -151,16 +221,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       });
     }
 
-    // 4. Distribusi Nilai Akhir Line Chart
+    // 4. Distribusi Nilai Akhir Line Chart (Dynamic)
     if (distribusiChartRef.current) {
       if (distribusiInstance.current) distribusiInstance.current.destroy();
+
+      const scoreBins = [0, 0, 0, 0, 0, 0];
+      participants.forEach((p) => {
+        const s = p.finalScore || 0;
+        if (s <= 0) return;
+        if (s < 50) scoreBins[0]++;
+        else if (s < 60) scoreBins[1]++;
+        else if (s < 70) scoreBins[2]++;
+        else if (s < 80) scoreBins[3]++;
+        else if (s < 90) scoreBins[4]++;
+        else scoreBins[5]++;
+      });
+
       distribusiInstance.current = new Chart(distribusiChartRef.current, {
         type: 'line',
         data: {
           labels: ['< 50', '50-59', '60-69', '70-79', '80-89', '90-100'],
           datasets: [{
             label: 'Frekuensi Peserta',
-            data: [12, 38, 86, 142, 118, 32],
+            data: scoreBins,
             borderColor: '#0284c7',
             backgroundColor: 'rgba(2, 132, 199, 0.1)',
             fill: true,
@@ -179,7 +262,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             y: {
               beginAtZero: true,
               grid: { color: '#f1f5f9' },
-              ticks: { font: { size: 10 } }
+              ticks: { font: { size: 10 }, stepSize: 1 }
             },
             x: {
               grid: { display: false },
@@ -196,7 +279,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       seleksiInstance.current?.destroy();
       distribusiInstance.current?.destroy();
     };
-  }, []);
+  }, [participants, studyPrograms, stats]);
 
   const filteredRankings = rankings.filter((item) => {
     const matchesSearch =
@@ -226,7 +309,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <p className="text-xs text-blue-100 mt-1 max-w-2xl leading-relaxed">
               Selamat datang, <strong className="text-yellow-300">{currentUser.name}</strong>. Hak akses aktif:{' '}
               <span className="font-semibold text-white underline decoration-yellow-400 underline-offset-2">{currentUser.role}</span>.
-              Formula Seleksi: <strong>UTBK (30%) + Wawancara (40%) + Survey (30%)</strong>.
+              Formula Seleksi: <strong>UTBK ({weights ? weights.utbkWeight : 35}%) + Wawancara ({weights ? weights.interviewWeight : 25}%) + Survey ({weights ? weights.surveyWeight : 25}%) + Afirmasi ({weights ? weights.affirmationWeight : 15}%)</strong>.
             </p>
           </div>
 
@@ -275,10 +358,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <Clock className="w-3.5 h-3.5 text-amber-500" />
               </div>
               <div className="text-xl font-bold text-amber-600">{stats.unassessed}</div>
-              <div className="text-[10px] text-slate-500 font-medium">Perlu tindakan</div>
+              <div className="text-[10px] text-slate-500 font-medium">{pctUnassessed}% dari total</div>
             </div>
             <div className="w-full bg-slate-100 h-1 mt-2.5 rounded-full overflow-hidden">
-              <div className="bg-amber-500 h-full w-[18%] rounded-full" />
+              <div className={`bg-amber-500 h-full rounded-full ${getWidthClass(pctUnassessed)}`} />
             </div>
           </div>
 
@@ -290,10 +373,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <FileCheck className="w-3.5 h-3.5 text-emerald-600" />
               </div>
               <div className="text-xl font-bold text-emerald-700">{stats.documentVerificationDone}</div>
-              <div className="text-[10px] text-slate-500 font-medium">Berkas diterima</div>
+              <div className="text-[10px] text-slate-500 font-medium">Berkas lengkap ({pctVerified}%)</div>
             </div>
             <div className="w-full bg-slate-100 h-1 mt-2.5 rounded-full overflow-hidden">
-              <div className="bg-emerald-600 h-full w-[80%] rounded-full" />
+              <div className={`bg-emerald-600 h-full rounded-full ${getWidthClass(pctVerified)}`} />
             </div>
           </div>
 
@@ -305,10 +388,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <CheckCircle className="w-3.5 h-3.5 text-cyan-600" />
               </div>
               <div className="text-xl font-bold text-cyan-700">{stats.fullyAssessed}</div>
-              <div className="text-[10px] text-slate-500 font-medium">3 Komponen tuntas</div>
+              <div className="text-[10px] text-slate-500 font-medium">3 Komponen ({pctAssessed}%)</div>
             </div>
             <div className="w-full bg-slate-100 h-1 mt-2.5 rounded-full overflow-hidden">
-              <div className="bg-cyan-600 h-full w-[82%] rounded-full" />
+              <div className={`bg-cyan-600 h-full rounded-full ${getWidthClass(pctAssessed)}`} />
             </div>
           </div>
 
@@ -323,7 +406,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="text-[10px] text-emerald-600 font-medium">Penerima Kuota</div>
             </div>
             <div className="w-full bg-emerald-100 h-1 mt-2.5 rounded-full overflow-hidden">
-              <div className="bg-emerald-600 h-full w-[28%] rounded-full" />
+              <div className={`bg-emerald-600 h-full rounded-full ${getWidthClass(pctPassed)}`} />
             </div>
           </div>
 
@@ -338,7 +421,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="text-[10px] text-rose-600 font-medium">Di bawah cutoff</div>
             </div>
             <div className="w-full bg-rose-100 h-1 mt-2.5 rounded-full overflow-hidden">
-              <div className="bg-rose-500 h-full w-[45%] rounded-full" />
+              <div className={`bg-rose-500 h-full rounded-full ${getWidthClass(pctFailed)}`} />
             </div>
           </div>
 
@@ -353,7 +436,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="text-[10px] text-amber-600 font-medium">Menunggu sisa</div>
             </div>
             <div className="w-full bg-amber-100 h-1 mt-2.5 rounded-full overflow-hidden">
-              <div className="bg-amber-500 h-full w-[8%] rounded-full" />
+              <div className={`bg-amber-500 h-full rounded-full ${getWidthClass(pctReserved)}`} />
             </div>
           </div>
         </div>
@@ -376,7 +459,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs font-bold text-slate-800">Status Pemberkasan</h3>
-            <span className="text-[10px] text-emerald-600 font-semibold">80.5% Lengkap</span>
+            <span className="text-[10px] text-emerald-600 font-semibold">{pctVerified}% Lengkap</span>
           </div>
           <div className="relative h-44 w-full">
             <canvas ref={berkasChartRef} id="chart-status-pemberkasan" />
@@ -387,7 +470,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs font-bold text-slate-800">Status Hasil Seleksi</h3>
-            <span className="text-[10px] text-blue-700 font-semibold">Kuota 120 Orang</span>
+            <span className="text-[10px] text-blue-700 font-semibold">Kuota {totalQuota} Orang</span>
           </div>
           <div className="relative h-44 w-full">
             <canvas ref={seleksiChartRef} id="chart-status-seleksi" />
@@ -398,7 +481,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs font-bold text-slate-800">Distribusi Nilai Akhir</h3>
-            <span className="text-[10px] text-amber-600 font-semibold">Mean: 76.4</span>
+            <span className="text-[10px] text-amber-600 font-semibold">Mean: {meanScore}</span>
           </div>
           <div className="relative h-44 w-full">
             <canvas ref={distribusiChartRef} id="chart-distribusi-nilai" />
@@ -542,15 +625,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="font-semibold text-slate-700 text-[11px]">Bobot Penilaian:</span>
             <div className="flex items-center gap-1.5 text-[11px]">
               <div className="w-2 h-2 rounded-full bg-blue-600" />
-              <span>UTBK: <strong>30%</strong></span>
+              <span>UTBK: <strong>{weights ? weights.utbkWeight : 35}%</strong></span>
             </div>
             <div className="flex items-center gap-1.5 text-[11px]">
               <div className="w-2 h-2 rounded-full bg-yellow-500" />
-              <span>Wawancara: <strong>40%</strong></span>
+              <span>Wawancara: <strong>{weights ? weights.interviewWeight : 25}%</strong></span>
             </div>
             <div className="flex items-center gap-1.5 text-[11px]">
               <div className="w-2 h-2 rounded-full bg-teal-500" />
-              <span>Survey: <strong>30%</strong></span>
+              <span>Survey: <strong>{weights ? weights.surveyWeight : 25}%</strong></span>
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px]">
+              <div className="w-2 h-2 rounded-full bg-purple-500" />
+              <span>Afirmasi: <strong>{weights ? weights.affirmationWeight : 15}%</strong></span>
             </div>
           </div>
           <div className="flex items-center gap-1 font-mono text-[11px] text-slate-500">

@@ -50,11 +50,9 @@ export async function seedFirestoreIfEmpty(): Promise<void> {
       console.log('Seeding initial data into Firestore for team sync...');
       const batch = writeBatch(db);
 
-      // Seed participants
-      INITIAL_PARTICIPANTS.forEach((p) => {
-        const docRef = doc(db, 'participants', String(p.id));
-        batch.set(docRef, sanitize(p));
-      });
+      // Participants are initialized empty (no dummy data)
+      // If needed, cleanup any legacy dummy participants
+      clearAllDummyParticipants().catch(() => {});
 
       // Seed academic years
       INITIAL_ACADEMIC_YEARS.forEach((y) => {
@@ -112,15 +110,13 @@ export async function seedFirestoreIfEmpty(): Promise<void> {
 export function subscribeToParticipants(callback: (participants: Participant[]) => void) {
   const colRef = collection(db, 'participants');
   return onSnapshot(colRef, (snapshot) => {
-    if (!snapshot.empty) {
-      const items: Participant[] = [];
-      snapshot.forEach((docSnap) => {
-        items.push(docSnap.data() as Participant);
-      });
-      // Sort by id or rank
-      items.sort((a, b) => a.id - b.id);
-      callback(items);
-    }
+    const items: Participant[] = [];
+    snapshot.forEach((docSnap) => {
+      items.push(docSnap.data() as Participant);
+    });
+    // Sort by id or rank
+    items.sort((a, b) => a.id - b.id);
+    callback(items);
   }, (err) => {
     console.warn('Firestore participants subscription error:', err);
   });
@@ -255,6 +251,41 @@ export async function fsBatchUpdateParticipants(participants: Participant[]): Pr
 
 export async function fsDeleteParticipant(id: number): Promise<void> {
   await deleteDoc(doc(db, 'participants', String(id)));
+}
+
+export async function fsBatchDeleteParticipants(ids: number[]): Promise<void> {
+  if (!ids || ids.length === 0) return;
+  const batch = writeBatch(db);
+  for (const id of ids) {
+    const docRef = doc(db, 'participants', String(id));
+    batch.delete(docRef);
+  }
+  await batch.commit();
+}
+
+export async function clearAllDummyParticipants(): Promise<number> {
+  try {
+    const snap = await getDocs(collection(db, 'participants'));
+    if (snap.empty) return 0;
+    const batch = writeBatch(db);
+    let count = 0;
+    snap.forEach((d) => {
+      const data = d.data() as any;
+      // Identify initial dummy participants (id 1..25 or regNumber matching KIPK-2026-00...)
+      if (data.id <= 25 || (typeof data.regNumber === 'string' && data.regNumber.startsWith('KIPK-2026-00'))) {
+        batch.delete(d.ref);
+        count++;
+      }
+    });
+    if (count > 0) {
+      await batch.commit();
+      console.log(`Pembersihan Firestore: Berhasil menghapus ${count} dummy peserta.`);
+    }
+    return count;
+  } catch (err) {
+    console.warn('Gagal membersihkan dummy peserta dari Firestore:', err);
+    return 0;
+  }
 }
 
 // Academic Years

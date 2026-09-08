@@ -1,4 +1,4 @@
-import { db, pool } from './index.ts';
+import { db, pool, isDatabaseConfigured } from './index.ts';
 import { 
   users, 
   academicYears, 
@@ -20,6 +20,10 @@ import { INITIAL_AUDIT_LOGS, INITIAL_BACKUPS } from '../data/initialAuditAndBack
 import { sql } from 'drizzle-orm';
 
 export async function seedDatabaseIfEmpty() {
+  if (!isDatabaseConfigured) {
+    console.log('[Seed] SQL_HOST is not set. Cloud SQL is not connected; in-memory store active.');
+    return;
+  }
   try {
     const userCountRes = await db.select({ count: sql<number>`count(*)` }).from(users);
     const count = Number(userCountRes[0]?.count || 0);
