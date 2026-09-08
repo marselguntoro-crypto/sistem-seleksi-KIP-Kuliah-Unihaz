@@ -1,6 +1,5 @@
 import express from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { db, isDatabaseConfigured } from './src/db/index.ts';
 import { 
   users, 
@@ -23,9 +22,6 @@ import {
 } from './src/data/mockData.ts';
 import { INITIAL_AUDIT_LOGS, INITIAL_BACKUPS } from './src/data/initialAuditAndBackup.ts';
 import { DEFAULT_SELECTION_WEIGHTS } from './src/utils/selectionUtils.ts';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3000;

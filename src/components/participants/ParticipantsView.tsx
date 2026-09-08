@@ -188,7 +188,11 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
   // WhatsApp helper
   const handleOpenWhatsApp = (p: Participant, e: React.MouseEvent) => {
     e.stopPropagation();
-    const cleanPhone = p.phone.replace(/[^0-9]/g, '');
+    const cleanPhone = (p.phone || '').replace(/[^0-9]/g, '');
+    if (!cleanPhone) {
+      alert(`Nomor WhatsApp untuk ${p.name} belum tersedia atau kosong.`);
+      return;
+    }
     const formattedPhone = cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone;
     const msg = encodeURIComponent(
       `Halo Sdr/i ${p.name}, Panitia Seleksi KIP-Kuliah UNIHAZ 2026 mengonfirmasi berkas Anda (No: ${p.regNumber}). Mohon siapkan kelengkapan berkas untuk tahap berikutnya.`
@@ -656,8 +660,8 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
               ) : (
                 paginatedData.map((item, idx) => {
                   const isSelected = selectedIds.includes(item.id);
-                  const cleanPhone = item.phone.replace(/[^0-9]/g, '');
-                  const formattedPhone = cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone;
+                  const cleanPhone = (item.phone || '').replace(/[^0-9]/g, '');
+                  const formattedPhone = cleanPhone ? (cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone) : '';
 
                   return (
                     <tr
@@ -697,7 +701,9 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
                         </div>
                         <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
                           <span className="w-3.5 h-3.5 rounded-full bg-slate-300 text-slate-700 flex items-center justify-center text-[9px] font-bold shrink-0">2</span>
-                          <span className="truncate max-w-[140px]" title={item.secondChoiceProdiName}>{item.secondChoiceProdiName}</span>
+                          <span className="truncate max-w-[140px]" title={item.secondChoiceProdiName || 'Tidak Memilih'}>
+                            {item.secondChoiceProdiName || <span className="italic text-slate-400 font-normal">Tidak Memilih</span>}
+                          </span>
                         </div>
                       </td>
 
@@ -711,25 +717,31 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
                       </td>
 
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            item.desil === 'Desil 1'
-                              ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                              : item.desil === 'Desil 2'
-                              ? 'bg-orange-100 text-orange-800 border border-orange-300'
-                              : item.desil === 'Desil 3'
-                              ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                              : item.desil === 'Desil 4'
-                              ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
-                              : item.desil === 'Desil 5'
-                              ? 'bg-blue-100 text-blue-800 border border-blue-300'
-                              : item.desil === 'Desil 6-10'
-                              ? 'bg-purple-100 text-purple-800 border border-purple-300'
-                              : 'bg-slate-100 text-slate-700 border border-slate-300'
-                          }`}
-                        >
-                          {item.desil}
-                        </span>
+                        {item.desil ? (
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              item.desil === 'Desil 1'
+                                ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                                : item.desil === 'Desil 2'
+                                ? 'bg-orange-100 text-orange-800 border border-orange-300'
+                                : item.desil === 'Desil 3'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                : item.desil === 'Desil 4'
+                                ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+                                : item.desil === 'Desil 5'
+                                ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                                : item.desil === 'Desil 6-10'
+                                ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                                : 'bg-slate-100 text-slate-700 border border-slate-300'
+                            }`}
+                          >
+                            {item.desil}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 italic bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                            -
+                          </span>
+                        )}
                       </td>
 
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
@@ -772,14 +784,18 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
                       </td>
 
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                        <button
-                          onClick={(e) => handleOpenWhatsApp(item, e)}
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-[11px] font-semibold transition cursor-pointer"
-                          title={`Kirim pesan WhatsApp ke ${item.name} (${item.phone})`}
-                        >
-                          <Phone className="w-3 h-3 text-emerald-600" />
-                          <span>WhatsApp</span>
-                        </button>
+                        {item.phone ? (
+                          <button
+                            onClick={(e) => handleOpenWhatsApp(item, e)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-[11px] font-semibold transition cursor-pointer"
+                            title={`Kirim pesan WhatsApp ke ${item.name} (${item.phone})`}
+                          >
+                            <Phone className="w-3 h-3 text-emerald-600" />
+                            <span>WhatsApp</span>
+                          </button>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 italic">Tanpa WA</span>
+                        )}
                       </td>
 
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">

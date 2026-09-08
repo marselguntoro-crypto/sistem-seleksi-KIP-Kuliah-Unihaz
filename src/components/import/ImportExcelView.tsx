@@ -76,19 +76,40 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
         'NIK': '1703014509060021',
         'NISN': '0068912340',
         'Pilihan Prodi 1': 'S1 Manajemen',
-        'Pilihan Prodi 2': 'S1 Akuntansi',
+        'Pilihan Prodi 2': '', // Contoh Pilihan 2 Kosong (Boleh kosong/opsional)
         'Asal Sekolah': 'SMKN 1 Arga Makmur',
         'Jurusan': 'Akuntansi',
         'Tahun Lulus': 2026,
         'Nomor WhatsApp': '085288990011',
         'Email': 'ratna.dewi@yahoo.com',
-        'Desil': 'Desil 2',
+        'Desil': 'DESIL 6-10', // Contoh format kapital (otomatis disesuaikan)
         'Nama Orang Tua': 'Rustam',
         'Pekerjaan Orang Tua': 'Petani Sayur',
         'Penghasilan': 1100000,
         'Tanggungan': 3,
         'Alamat': 'Desa Rama Agung RT 03',
         'Kota': 'Bengkulu Utara',
+        'Provinsi': 'Bengkulu'
+      },
+      {
+        'Nomor Pendaftaran': 'KIPK-2026-9003',
+        'Nama Lengkap': 'Fajar Ramadhan',
+        'NIK': '1771011503060022',
+        'NISN': '0069921455',
+        'Pilihan Prodi 1': 'S1 Ilmu Hukum',
+        'Pilihan Prodi 2': '', // Pilihan 2 Kosong
+        'Asal Sekolah': 'SMAN 2 Kota Bengkulu',
+        'Jurusan': 'IPS',
+        'Tahun Lulus': 2026,
+        'Nomor WhatsApp': '081368994422',
+        'Email': '', // Email opsional / fleksibel
+        'Desil': 'desil 2', // Contoh format huruf kecil
+        'Nama Orang Tua': 'Ramadhan',
+        'Pekerjaan Orang Tua': 'Pedagang Kecil',
+        'Penghasilan': 1250000,
+        'Tanggungan': 3,
+        'Alamat': 'Jl. Salak No. 14, Lingkar Timur',
+        'Kota': 'Kota Bengkulu',
         'Provinsi': 'Bengkulu'
       }
     ];
@@ -102,7 +123,7 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
   // Sample Data Injector for Instant Testing
   const handleLoadSampleTestData = () => {
     const testRawData = [
-      // Row 1: Valid
+      // Row 1: Valid Lengkap
       {
         'Nomor Pendaftaran': 'KIPK-2026-0501',
         'Nama Lengkap': 'Bayu Wicaksono',
@@ -124,20 +145,20 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
         'Kota': 'Kota Bengkulu',
         'Provinsi': 'Bengkulu'
       },
-      // Row 2: Valid
+      // Row 2: Valid dengan Prodi 2 Kosong, Desil Huruf Kapital 'DESIL 6-10', Format Email Fleksibel Kapital, & No HP Fleksibel (+62)
       {
         'Nomor Pendaftaran': 'KIPK-2026-0502',
         'Nama Lengkap': 'Citra Kirana Lestari',
         'NIK': '1702015509060032',
         'NISN': '0067890123',
         'Pilihan Prodi 1': 'S1 Ilmu Hukum',
-        'Pilihan Prodi 2': 'S1 Administrasi Publik',
+        'Pilihan Prodi 2': '', // Pilihan 2 KOSONG -> sistem membaca & menerapkan kosong
         'Asal Sekolah': 'SMAN 1 Curup',
         'Jurusan': 'IPS',
         'Tahun Lulus': '2026',
-        'Nomor WhatsApp': '085299001122',
-        'Email': 'citra.kirana@gmail.com',
-        'Desil': 'Desil 2',
+        'Nomor WhatsApp': '+62 852-9900-1122', // Format HP fleksibel dengan +62 & spasi
+        'Email': '  CITRA.KIRANA@GMAIL.COM  ', // Format email fleksibel kapital & spasi
+        'Desil': 'DESIL 6-10', // Desil kapital -> otomatis disesuaikan ke 'Desil 6-10'
         'Nama Orang Tua': 'Herman',
         'Pekerjaan Orang Tua': 'Pedagang',
         'Penghasilan': '1200000',
@@ -146,20 +167,20 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
         'Kota': 'Rejang Lebong',
         'Provinsi': 'Bengkulu'
       },
-      // Row 3: Format Error (NIK kurang digit, NISN salah, prodi tidak valid)
+      // Row 3: Format Error (NIK & NISN kurang digit, Prodi 1 tidak ada, No HP format salah -> otomatis kosong, Desil tidak sesuai -> otomatis kosong)
       {
         'Nomor Pendaftaran': 'KIPK-2026-0503',
         'Nama Lengkap': 'Danang Prasetyo (Data Cacat)',
         'NIK': '177102140', // Error: only 9 digits
         'NISN': '00612', // Error: only 5 digits
         'Pilihan Prodi 1': 'S1 Kedokteran Gigi', // Error: not existing in UNIHAZ
-        'Pilihan Prodi 2': 'S1 Kedokteran Gigi', // Error: duplicate choice
+        'Pilihan Prodi 2': '', // Kosong diterapkan kosong
         'Asal Sekolah': 'SMAN 2 Bengkulu',
         'Jurusan': 'IPA',
         'Tahun Lulus': '2026',
-        'Nomor WhatsApp': '081234', // Error: too short
-        'Email': 'danang-tanpa-domain', // Error: invalid email
-        'Desil': 'Desil 15', // Error: invalid desil (valid: Non-Desil, Desil 1-5, Desil 6-10)
+        'Nomor WhatsApp': '081234', // Format salah: sistem membaca tidak valid dan otomatis nilai kosong
+        'Email': 'danang-tanpa-domain', // Error: invalid email format
+        'Desil': 'Desil 15', // Format desil tidak sesuai -> otomatis kosong (bukan error fatal)
         'Nama Orang Tua': 'Prasetyo',
         'Pekerjaan Orang Tua': 'Karyawan',
         'Penghasilan': '1500000',
@@ -168,7 +189,7 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
         'Kota': 'Kota Bengkulu',
         'Provinsi': 'Bengkulu'
       },
-      // Row 4: Duplicate Error with Database (same NIK with existing Ahmad Fauzan)
+      // Row 4: Duplicate Error with Database (same NIK with existing Ahmad Fauzan), Desil huruf kecil 'desil 1'
       {
         'Nomor Pendaftaran': 'KIPK-2026-0504',
         'Nama Lengkap': 'Ahmad Fauzan Duplikat',
@@ -181,7 +202,7 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
         'Tahun Lulus': '2026',
         'Nomor WhatsApp': '081273849102',
         'Email': 'ahmad.fauzan@gmail.com',
-        'Desil': 'Desil 1',
+        'Desil': 'desil 1', // Huruf kecil -> dinormalisasi ke 'Desil 1'
         'Nama Orang Tua': 'M. Yusuf',
         'Pekerjaan Orang Tua': 'Buruh',
         'Penghasilan': '950000',
@@ -205,17 +226,13 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
     rawRows.forEach((row, index) => {
       const rowNum = index + 2; // header is row 1
       const errors: string[] = [];
+      const warnings: string[] = [];
 
       const regNumber = String(row['Nomor Pendaftaran'] || row['regNumber'] || '').trim();
       const name = String(row['Nama Lengkap'] || row['Nama'] || row['name'] || '').trim();
       const nik = String(row['NIK'] || row['nik'] || '').replace(/[^0-9]/g, '');
       const nisn = String(row['NISN'] || row['nisn'] || '').replace(/[^0-9]/g, '');
-      const prodi1Name = String(row['Pilihan Prodi 1'] || row['Pilihan 1'] || row['firstChoiceProdiName'] || '').trim();
-      const prodi2Name = String(row['Pilihan Prodi 2'] || row['Pilihan 2'] || row['secondChoiceProdiName'] || '').trim();
       const schoolOrigin = String(row['Asal Sekolah'] || row['schoolOrigin'] || '').trim();
-      const phone = String(row['Nomor WhatsApp'] || row['No HP'] || row['phone'] || '').trim();
-      const email = String(row['Email'] || row['email'] || '').trim();
-      const desil = String(row['Desil'] || row['desil'] || 'Desil 1').trim();
       const graduationYear = parseInt(row['Tahun Lulus'] || row['graduationYear']) || 2026;
       const parentName = String(row['Nama Orang Tua'] || row['parentName'] || 'Wali').trim();
       const parentJob = String(row['Pekerjaan Orang Tua'] || row['parentJob'] || 'Buruh/Petani').trim();
@@ -225,6 +242,159 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
       const city = String(row['Kota'] || row['city'] || 'Kota Bengkulu').trim();
       const province = String(row['Provinsi'] || row['province'] || 'Bengkulu').trim();
 
+      // ========================================================================
+      // 1. Program Studi Pilihan 1 & Pilihan 2
+      // Aturan: Jika Pilihan 2 kosong di data import, sistem membaca & menerapkan kosong
+      // ========================================================================
+      const rawProdi1Name = String(
+        row['Pilihan Prodi 1'] || row['Pilihan 1'] || row['firstChoiceProdiName'] || row['Prodi Pilihan 1'] || ''
+      ).trim();
+      const rawProdi2Name = String(
+        row['Pilihan Prodi 2'] || row['Pilihan 2'] || row['secondChoiceProdiName'] || row['Prodi Pilihan 2'] || row['Pilihan Ke-2'] || ''
+      ).trim();
+
+      // Match Prodi 1 (Wajib Ada)
+      const foundProdi1 = studyPrograms.find(
+        (p) => p.name.toLowerCase() === rawProdi1Name.toLowerCase() || p.code.toLowerCase() === rawProdi1Name.toLowerCase()
+      );
+      if (!rawProdi1Name) {
+        errors.push('Program Studi Pilihan 1 wajib diisi');
+      } else if (!foundProdi1) {
+        errors.push(`Program Studi Pilihan 1 '${rawProdi1Name}' tidak terdaftar di master data UNIHAZ`);
+      }
+
+      // Match Prodi 2 (Opsional: Jika kosong di data import, dibaca dan diterapkan kosong)
+      let secondChoiceProdiId = 0;
+      let secondChoiceProdiName = '';
+      const isProdi2Empty =
+        !rawProdi2Name ||
+        ['-', '--', 'kosong', 'tidak ada', 'tidak memilih', 'belum memilih', 'none', 'n/a', 'null'].includes(rawProdi2Name.toLowerCase());
+
+      if (!isProdi2Empty) {
+        const foundProdi2 = studyPrograms.find(
+          (p) => p.name.toLowerCase() === rawProdi2Name.toLowerCase() || p.code.toLowerCase() === rawProdi2Name.toLowerCase()
+        );
+        if (!foundProdi2) {
+          errors.push(`Program Studi Pilihan 2 '${rawProdi2Name}' tidak terdaftar di master data UNIHAZ`);
+          secondChoiceProdiName = rawProdi2Name;
+        } else {
+          secondChoiceProdiId = foundProdi2.id;
+          secondChoiceProdiName = foundProdi2.name;
+          if (foundProdi1 && foundProdi2 && foundProdi1.id === foundProdi2.id) {
+            errors.push('Pilihan Prodi 1 dan Pilihan 2 tidak boleh sama');
+          }
+        }
+      }
+
+      // ========================================================================
+      // 2. Email (Format email lebih fleksibel)
+      // Pembersihan spasi, tanda petik, lowercase, dukungan subdomain/plus addressing,
+      // dan nilai kosong/placeholder diizinkan tanpa memicu error validasi.
+      // ========================================================================
+      const rawEmail = String(row['Email'] || row['email'] || row['Alamat Email'] || row['E-mail'] || row['Surel'] || '').trim();
+      let email = '';
+      if (rawEmail) {
+        const trimmedLower = rawEmail.toLowerCase();
+        const isEmailPlaceholder = ['-', '--', 'tidak ada', 'none', 'n/a', 'kosong', 'null', 'undefined', 'belum ada'].includes(trimmedLower);
+        if (!isEmailPlaceholder) {
+          // Bersihkan spasi tidak disengaja, tanda petik pembungkus, dan tanda baca di akhir cell
+          let cleanedEmail = rawEmail.replace(/[\s"']/g, '').replace(/[.,;:]+$/, '').toLowerCase();
+          
+          // Regex fleksibel: cek komponen user, @, dan domain dengan minimal 1 titik
+          const flexibleEmailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+          if (flexibleEmailRegex.test(cleanedEmail)) {
+            email = cleanedEmail;
+          } else if (cleanedEmail.includes('@') && cleanedEmail.split('@')[1]?.includes('.')) {
+            // Toleransi domain khusus
+            email = cleanedEmail;
+          } else {
+            errors.push(`Format email '${rawEmail}' tidak valid`);
+            email = cleanedEmail;
+          }
+        }
+      }
+
+      // ========================================================================
+      // 3. Desil Kemiskinan
+      // Aturan: Jika di data import tulisannya capital atau tidak (contoh 'DESIL 6-10'),
+      // ketika di upload disesuaikan, atau otomatis kosong jika tidak sesuai format
+      // ========================================================================
+      const rawDesil = String(
+        row['Desil'] || row['desil'] || row['Kategori Desil'] || row['Desil P3KE'] || row['desilEkonomi'] || ''
+      ).trim();
+
+      let normalizedDesil = '';
+      if (rawDesil) {
+        const cleanDesil = rawDesil.toLowerCase().replace(/[\s_\-]+/g, ' ').trim();
+        if (cleanDesil === '1' || cleanDesil === 'desil 1' || cleanDesil === 'desil1') {
+          normalizedDesil = 'Desil 1';
+        } else if (cleanDesil === '2' || cleanDesil === 'desil 2' || cleanDesil === 'desil2') {
+          normalizedDesil = 'Desil 2';
+        } else if (cleanDesil === '3' || cleanDesil === 'desil 3' || cleanDesil === 'desil3') {
+          normalizedDesil = 'Desil 3';
+        } else if (cleanDesil === '4' || cleanDesil === 'desil 4' || cleanDesil === 'desil4') {
+          normalizedDesil = 'Desil 4';
+        } else if (cleanDesil === '5' || cleanDesil === 'desil 5' || cleanDesil === 'desil5') {
+          normalizedDesil = 'Desil 5';
+        } else if (
+          cleanDesil === '6 10' || cleanDesil === '6-10' || cleanDesil === 'desil 6 10' || 
+          cleanDesil === 'desil 6-10' || cleanDesil === 'desil6-10' ||
+          cleanDesil === '6' || cleanDesil === '7' || cleanDesil === '8' || cleanDesil === '9' || cleanDesil === '10' ||
+          cleanDesil === 'desil 6' || cleanDesil === 'desil 7' || cleanDesil === 'desil 8' || cleanDesil === 'desil 9' || cleanDesil === 'desil 10'
+        ) {
+          normalizedDesil = 'Desil 6-10';
+        } else if (
+          cleanDesil === 'non desil' || cleanDesil === 'non-desil' || cleanDesil === 'nondesil' ||
+          cleanDesil === 'p3ke' || cleanDesil === 'sktm' || cleanDesil === 'non desil p3ke' || cleanDesil === 'non-desil p3ke'
+        ) {
+          normalizedDesil = 'Non-Desil';
+        } else {
+          // Tidak sesuai format -> otomatis kosong (tidak menjadi error fatal yang memblokir import)
+          normalizedDesil = '';
+          warnings.push(`Format Desil '${rawDesil}' tidak sesuai (otomatis dikosongkan)`);
+        }
+      }
+
+      // ========================================================================
+      // 4. Nomor HP / WhatsApp
+      // Aturan: Jika formatnya salah sistem membaca tidak valid dan otomatis nilainya kosong
+      // ========================================================================
+      const rawPhone = String(
+        row['Nomor WhatsApp'] || row['No WhatsApp'] || row['Nomor HP'] || row['No HP'] || 
+        row['phone'] || row['WhatsApp'] || row['Telepon'] || row['No. HP'] || ''
+      ).trim();
+
+      let phone = '';
+      if (rawPhone) {
+        const trimmedPhoneLower = rawPhone.toLowerCase();
+        const isPhonePlaceholder = ['-', '--', 'tidak ada', 'none', 'n/a', 'kosong', 'null'].includes(trimmedPhoneLower);
+        if (!isPhonePlaceholder) {
+          // Hilangkan karakter pemformatan seperti spasi, tanda strip, kurung, dan titik
+          let cleanDigits = rawPhone.replace(/[\s\-\(\)\.]/g, '');
+          if (cleanDigits.startsWith('+62')) {
+            cleanDigits = '0' + cleanDigits.slice(3);
+          } else if (cleanDigits.startsWith('62')) {
+            cleanDigits = '0' + cleanDigits.slice(2);
+          } else if (cleanDigits.startsWith('8')) {
+            cleanDigits = '0' + cleanDigits;
+          }
+
+          const isDigitsOnly = /^[0-9]+$/.test(cleanDigits);
+          const isValidLength = cleanDigits.length >= 9 && cleanDigits.length <= 15;
+
+          if (isDigitsOnly && isValidLength) {
+            phone = cleanDigits;
+          } else {
+            // Format salah: sistem membaca tidak valid dan otomatis nilainya kosong
+            phone = '';
+            warnings.push(`Nomor HP/WA '${rawPhone}' tidak valid (otomatis dikosongkan)`);
+          }
+        }
+      }
+
+      // ========================================================================
+      // 5. Validasi Standar Identitas Utama (Nama, NIK 16 digit, NISN)
+      // ========================================================================
       // Field Check: Name
       if (!name) {
         errors.push('Nama calon peserta wajib diisi');
@@ -240,51 +410,9 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
         errors.push(`NISN harus berupa 8 sampai 10 digit angka (ditemukan ${nisn.length} digit)`);
       }
 
-      // Field Check: Phone
-      if (phone.length < 9) {
-        errors.push(`Nomor HP/WhatsApp '${phone}' tidak valid`);
-      }
-
-      // Field Check: Email
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        errors.push(`Format email '${email}' tidak valid`);
-      }
-
-      // Normalize and Check Desil (Non-Desil, Desil 1, 2, 3, 4, 5, Desil 6-10)
-      let normalizedDesil = desil;
-      if (['Desil 6', 'Desil 7', 'Desil 8', 'Desil 9', 'Desil 10', 'Desil 6-10', '6-10', 'Desil 6 - 10'].includes(desil)) {
-        normalizedDesil = 'Desil 6-10';
-      } else if (['Non Desil', 'Non-Desil', 'P3KE', 'SKTM', 'Non-Desil (P3KE)', 'Non desil'].includes(desil)) {
-        normalizedDesil = 'Non-Desil';
-      }
-
-      const validDesils = ['Non-Desil', 'Desil 1', 'Desil 2', 'Desil 3', 'Desil 4', 'Desil 5', 'Desil 6-10'];
-      if (!validDesils.includes(normalizedDesil)) {
-        errors.push(`Desil '${desil}' tidak valid. Pilihan valid: Non-Desil, Desil 1, Desil 2, Desil 3, Desil 4, Desil 5, atau Desil 6-10`);
-      }
-
-      // Match Prodi 1
-      const foundProdi1 = studyPrograms.find(
-        (p) => p.name.toLowerCase() === prodi1Name.toLowerCase() || p.code === prodi1Name
-      );
-      if (!foundProdi1) {
-        errors.push(`Program Studi Pilihan 1 '${prodi1Name}' tidak terdaftar di master data UNIHAZ`);
-      }
-
-      // Match Prodi 2
-      const foundProdi2 = studyPrograms.find(
-        (p) => p.name.toLowerCase() === prodi2Name.toLowerCase() || p.code === prodi2Name
-      );
-      if (!foundProdi2) {
-        errors.push(`Program Studi Pilihan 2 '${prodi2Name}' tidak terdaftar di master data UNIHAZ`);
-      }
-
-      if (foundProdi1 && foundProdi2 && foundProdi1.id === foundProdi2.id) {
-        errors.push('Pilihan Prodi 1 dan Pilihan 2 tidak boleh sama');
-      }
-
-      // Check Duplicates: Internal File Check
+      // ========================================================================
+      // 6. Pemeriksaan Duplikasi (Internal File & Database)
+      // ========================================================================
       let isDuplicate = false;
       if (internalNiks.has(nik)) {
         errors.push(`Duplikat dalam file: NIK ${nik} muncul lebih dari satu kali`);
@@ -329,14 +457,15 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
         regNumber: regNumber || `KIPK-2026-AUTO${rowNum}`,
         nik,
         nisn,
-        firstChoiceProdiName: foundProdi1?.name || prodi1Name,
-        secondChoiceProdiName: foundProdi2?.name || prodi2Name,
+        firstChoiceProdiName: foundProdi1?.name || rawProdi1Name,
+        secondChoiceProdiName: secondChoiceProdiName,
         schoolOrigin,
         phone,
         email,
         desil: normalizedDesil,
         status,
         errors,
+        warnings,
         rawPayload: {
           name,
           regNumber: regNumber || `KIPK-2026-AUTO${rowNum}`,
@@ -345,9 +474,9 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
           academicYearId: activeYear.id,
           academicYearCode: activeYear.code,
           firstChoiceProdiId: foundProdi1?.id || studyPrograms[0]?.id || 1,
-          firstChoiceProdiName: foundProdi1?.name || prodi1Name,
-          secondChoiceProdiId: foundProdi2?.id || studyPrograms[1]?.id || 2,
-          secondChoiceProdiName: foundProdi2?.name || prodi2Name,
+          firstChoiceProdiName: foundProdi1?.name || rawProdi1Name,
+          secondChoiceProdiId: secondChoiceProdiId,
+          secondChoiceProdiName: secondChoiceProdiName,
           schoolOrigin,
           schoolType: 'SMA',
           schoolMajor: 'MIPA',
@@ -744,7 +873,19 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
 
                       <td className="py-2.5 px-4 font-bold text-slate-900 whitespace-nowrap">
                         <div>{item.name || '<KOSONG>'}</div>
-                        <div className="text-[10px] text-slate-400 font-normal">{item.schoolOrigin}</div>
+                        <div className="text-[10px] text-slate-500 font-normal flex items-center gap-2 mt-0.5">
+                          <span>{item.schoolOrigin}</span>
+                          <span>&bull;</span>
+                          <span className="font-mono">
+                            {item.phone ? item.phone : <span className="text-slate-400 italic">HP Kosong</span>}
+                          </span>
+                          {item.email && (
+                            <>
+                              <span>&bull;</span>
+                              <span>{item.email}</span>
+                            </>
+                          )}
+                        </div>
                       </td>
 
                       <td className="py-2.5 px-3 font-mono text-[11px] whitespace-nowrap">
@@ -761,24 +902,64 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
 
                       <td className="py-2.5 px-4 whitespace-nowrap text-[11px]">
                         <div className="font-semibold text-blue-900">1. {item.firstChoiceProdiName}</div>
-                        <div className="text-slate-500">2. {item.secondChoiceProdiName}</div>
+                        <div className="text-slate-500">
+                          2. {item.secondChoiceProdiName || (
+                            <span className="text-slate-400 italic font-normal">Kosong (Tidak Memilih)</span>
+                          )}
+                        </div>
                       </td>
 
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-800">
-                          {item.desil}
-                        </span>
+                        {item.desil ? (
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              item.desil === 'Desil 1'
+                                ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                                : item.desil === 'Desil 2'
+                                ? 'bg-orange-100 text-orange-800 border border-orange-300'
+                                : item.desil === 'Desil 3'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                : item.desil === 'Desil 4'
+                                ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+                                : item.desil === 'Desil 5'
+                                ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                                : item.desil === 'Desil 6-10'
+                                ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                                : 'bg-slate-100 text-slate-700 border border-slate-300'
+                            }`}
+                          >
+                            {item.desil}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 italic text-[10px] bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                            Kosong
+                          </span>
+                        )}
                       </td>
 
                       <td className="py-2.5 px-4 text-xs">
-                        {item.errors.length === 0 ? (
-                          <span className="text-emerald-700 font-medium text-[11px]">Tidak ada kesalahan</span>
+                        {item.errors.length === 0 && (!item.warnings || item.warnings.length === 0) ? (
+                          <span className="text-emerald-700 font-medium text-[11px] flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span>Tidak ada kesalahan</span>
+                          </span>
                         ) : (
-                          <ul className="list-disc pl-3 text-rose-700 text-[11px] space-y-0.5 font-medium">
-                            {item.errors.map((err, errIdx) => (
-                              <li key={errIdx}>{err}</li>
-                            ))}
-                          </ul>
+                          <div className="space-y-1">
+                            {item.errors.length > 0 && (
+                              <ul className="list-disc pl-3 text-rose-700 text-[11px] space-y-0.5 font-medium">
+                                {item.errors.map((err, errIdx) => (
+                                  <li key={errIdx}>{err}</li>
+                                ))}
+                              </ul>
+                            )}
+                            {item.warnings && item.warnings.length > 0 && (
+                              <ul className="list-disc pl-3 text-amber-700 text-[10px] space-y-0.5">
+                                {item.warnings.map((warn, wIdx) => (
+                                  <li key={wIdx}>{warn}</li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
                         )}
                       </td>
                     </tr>

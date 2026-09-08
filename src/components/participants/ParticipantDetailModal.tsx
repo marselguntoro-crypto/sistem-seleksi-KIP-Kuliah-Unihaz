@@ -34,8 +34,8 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
   const [waTemplate, setWaTemplate] = useState<'BERKAS' | 'WAWANCARA' | 'PENGUMUMAN'>('BERKAS');
 
   // Format WhatsApp Link
-  const cleanPhone = participant.phone.replace(/[^0-9]/g, '');
-  const formattedPhone = cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone;
+  const cleanPhone = (participant.phone || '').replace(/[^0-9]/g, '');
+  const formattedPhone = cleanPhone ? (cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone) : '';
 
   const getWaMessage = () => {
     if (waTemplate === 'BERKAS') {
@@ -48,6 +48,10 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
   };
 
   const handleOpenWhatsApp = () => {
+    if (!formattedPhone) {
+      alert(`Nomor WhatsApp untuk ${participant.name} kosong atau tidak valid.`);
+      return;
+    }
     const text = encodeURIComponent(getWaMessage());
     window.open(`https://wa.me/${formattedPhone}?text=${text}`, '_blank');
   };
@@ -71,25 +75,31 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-900 text-blue-100 border border-blue-700 font-mono">
                   {participant.regNumber}
                 </span>
-                <span
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    participant.desil === 'Desil 1'
-                      ? 'bg-rose-500 text-white'
-                      : participant.desil === 'Desil 2'
-                      ? 'bg-orange-500 text-white'
-                      : participant.desil === 'Desil 3'
-                      ? 'bg-amber-500 text-white'
-                      : participant.desil === 'Desil 4'
-                      ? 'bg-yellow-500 text-slate-900'
-                      : participant.desil === 'Desil 5'
-                      ? 'bg-blue-500 text-white'
-                      : participant.desil === 'Desil 6-10'
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-slate-500 text-white'
-                  }`}
-                >
-                  {participant.desil}
-                </span>
+                {participant.desil ? (
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      participant.desil === 'Desil 1'
+                        ? 'bg-rose-500 text-white'
+                        : participant.desil === 'Desil 2'
+                        ? 'bg-orange-500 text-white'
+                        : participant.desil === 'Desil 3'
+                        ? 'bg-amber-500 text-white'
+                        : participant.desil === 'Desil 4'
+                        ? 'bg-yellow-500 text-slate-900'
+                        : participant.desil === 'Desil 5'
+                        ? 'bg-blue-500 text-white'
+                        : participant.desil === 'Desil 6-10'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-slate-500 text-white'
+                    }`}
+                  >
+                    {participant.desil}
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-900/60 text-blue-200 border border-blue-700">
+                    Desil Tidak Tercatat
+                  </span>
+                )}
               </div>
               <p className="text-xs text-blue-200 mt-0.5">
                 Tahun Akademik: <strong>{participant.academicYearCode}</strong> &bull; Terdaftar: {participant.createdAt}
@@ -198,7 +208,11 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
                 </div>
                 <div className="flex justify-between py-1 border-b border-slate-50">
                   <span className="text-slate-500">Pilihan 2 (Alternatif):</span>
-                  <span className="font-medium text-slate-800">{participant.secondChoiceProdiName}</span>
+                  <span className="font-medium text-slate-800">
+                    {participant.secondChoiceProdiName || (
+                      <span className="text-slate-400 italic font-normal">Tidak Memilih</span>
+                    )}
+                  </span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-slate-50">
                   <span className="text-slate-500">Tahun Akademik:</span>
@@ -252,7 +266,9 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between py-1 border-b border-slate-50">
                   <span className="text-slate-500">Tingkat Desil P3KE/BDT:</span>
-                  <span className="font-bold text-rose-600">{participant.desil}</span>
+                  <span className="font-bold text-rose-600">
+                    {participant.desil || <span className="text-slate-400 italic font-normal">Tidak Ada Desil</span>}
+                  </span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-slate-50">
                   <span className="text-slate-500">Nama Orang Tua / Wali:</span>
@@ -367,7 +383,7 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
 
             <div className="bg-white p-3 rounded-lg border border-emerald-200 text-xs text-slate-700 leading-relaxed font-sans">
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                Isi Pesan Otomatis (Terkirim ke +{formattedPhone}):
+                {formattedPhone ? `Isi Pesan Otomatis (Terkirim ke +${formattedPhone}):` : 'Isi Pesan Otomatis (Nomor HP Tidak Tersedia):'}
               </div>
               {getWaMessage()}
             </div>
@@ -376,21 +392,27 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
               <div className="flex items-center gap-3 text-xs text-slate-600">
                 <span className="flex items-center gap-1 font-mono font-bold text-slate-800">
                   <Phone className="w-3.5 h-3.5 text-emerald-600" />
-                  {participant.phone}
+                  {participant.phone || <span className="text-slate-400 italic font-normal">Tidak ada nomor HP</span>}
                 </span>
                 <span className="flex items-center gap-1 text-slate-600">
                   <Mail className="w-3.5 h-3.5 text-blue-600" />
-                  {participant.email}
+                  {participant.email || '-'}
                 </span>
               </div>
 
               <button
                 type="button"
                 onClick={handleOpenWhatsApp}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-xs transition cursor-pointer"
+                disabled={!formattedPhone}
+                className={`px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 shadow-xs transition ${
+                  formattedPhone
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                }`}
+                title={formattedPhone ? 'Buka WhatsApp Web / App' : 'Nomor WhatsApp tidak tersedia'}
               >
                 <Send className="w-3.5 h-3.5" />
-                <span>Buka WhatsApp Web / App</span>
+                <span>{formattedPhone ? 'Buka WhatsApp Web / App' : 'Nomor HP Kosong'}</span>
               </button>
             </div>
           </div>

@@ -95,7 +95,7 @@ export interface StudyProgram {
 // PHASE 2: DATA PESERTA TYPES
 // ========================
 
-export type DesilCategory = 'Non-Desil' | 'Desil 1' | 'Desil 2' | 'Desil 3' | 'Desil 4' | 'Desil 5' | 'Desil 6-10' | 'P3KE' | 'Non Desil';
+export type DesilCategory = 'Non-Desil' | 'Desil 1' | 'Desil 2' | 'Desil 3' | 'Desil 4' | 'Desil 5' | 'Desil 6-10' | 'P3KE' | 'Non Desil' | '' | '-';
 export type DesilEkonomi = DesilCategory;
 
 export interface Participant {

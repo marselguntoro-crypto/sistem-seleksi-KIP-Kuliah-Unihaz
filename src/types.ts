@@ -22,7 +22,7 @@ export type AccreditationGrade = 'Unggul' | 'A' | 'Baik Sekali' | 'B' | 'Baik' |
 
 export type SchoolType = 'SMA' | 'SMK' | 'MA';
 
-export type DesilEkonomi = 'Non-Desil' | 'Desil 1' | 'Desil 2' | 'Desil 3' | 'Desil 4' | 'Desil 5' | 'Desil 6-10';
+export type DesilEkonomi = 'Non-Desil' | 'Desil 1' | 'Desil 2' | 'Desil 3' | 'Desil 4' | 'Desil 5' | 'Desil 6-10' | '' | '-';
 export type DesilCategory = DesilEkonomi;
 
 export interface DocumentRequirement {
@@ -240,6 +240,7 @@ export interface ImportPreviewRow {
   desil: string;
   status: 'VALID' | 'ERROR' | 'DUPLICATE';
   errors: string[];
+  warnings?: string[];
   rawPayload: any;
 }
 
