@@ -238,7 +238,8 @@ export interface ImportPreviewRow {
   phone: string;
   email: string;
   desil: string;
-  status: 'VALID' | 'ERROR' | 'DUPLICATE';
+  status: 'VALID' | 'ERROR' | 'DUPLICATE' | 'EXISTING';
+  isExistingInDb?: boolean;
   errors: string[];
   warnings?: string[];
   rawPayload: any;

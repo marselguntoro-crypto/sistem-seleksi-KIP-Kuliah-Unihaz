@@ -41,7 +41,7 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [parsedRows, setParsedRows] = useState<ImportPreviewRow[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedTab, setSelectedTab] = useState<'ALL' | 'VALID' | 'ERROR' | 'DUPLICATE'>('ALL');
+  const [selectedTab, setSelectedTab] = useState<'ALL' | 'VALID' | 'EXISTING' | 'ERROR' | 'DUPLICATE'>('ALL');
   const [transactionMode, setTransactionMode] = useState<'STRICT' | 'PARTIAL'>('STRICT');
   const [importStatus, setImportStatus] = useState<'IDLE' | 'SUCCESS' | 'ROLLED_BACK'>('IDLE');
   const [importedCount, setImportedCount] = useState(0);
@@ -167,20 +167,20 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
         'Kota': 'Rejang Lebong',
         'Provinsi': 'Bengkulu'
       },
-      // Row 3: Format Error (NIK & NISN kurang digit, Prodi 1 tidak ada, No HP format salah -> otomatis kosong, Desil tidak sesuai -> otomatis kosong)
+      // Row 3: NISN tidak 8-10 digit (hanya 5 digit '00612') -> otomatis dianggap kosong penerapannya, NIK 9 digit -> error
       {
         'Nomor Pendaftaran': 'KIPK-2026-0503',
-        'Nama Lengkap': 'Danang Prasetyo (Data Cacat)',
-        'NIK': '177102140', // Error: only 9 digits
-        'NISN': '00612', // Error: only 5 digits
-        'Pilihan Prodi 1': 'S1 Kedokteran Gigi', // Error: not existing in UNIHAZ
+        'Nama Lengkap': 'Danang Prasetyo (Format NIK Cacat)',
+        'NIK': '177102140', // Error: hanya 9 digit
+        'NISN': '00612', // NISN hanya 5 digit: otomatis dianggap kosong, bukan error fatal
+        'Pilihan Prodi 1': 'S1 Kedokteran Gigi', // Error: tidak terdaftar di UNIHAZ
         'Pilihan Prodi 2': '', // Kosong diterapkan kosong
         'Asal Sekolah': 'SMAN 2 Bengkulu',
         'Jurusan': 'IPA',
         'Tahun Lulus': '2026',
-        'Nomor WhatsApp': '081234', // Format salah: sistem membaca tidak valid dan otomatis nilai kosong
-        'Email': 'danang-tanpa-domain', // Error: invalid email format
-        'Desil': 'Desil 15', // Format desil tidak sesuai -> otomatis kosong (bukan error fatal)
+        'Nomor WhatsApp': '081234', // Format salah: otomatis nilai kosong
+        'Email': 'danang-tanpa-domain', // Error: format email cacat
+        'Desil': 'Desil 15', // Format desil tidak sesuai -> otomatis kosong
         'Nama Orang Tua': 'Prasetyo',
         'Pekerjaan Orang Tua': 'Karyawan',
         'Penghasilan': '1500000',
@@ -189,11 +189,12 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
         'Kota': 'Kota Bengkulu',
         'Provinsi': 'Bengkulu'
       },
-      // Row 4: Duplicate Error with Database (same NIK with existing Ahmad Fauzan), Desil huruf kecil 'desil 1'
+      // Row 4: Data yang sudah ada di database (NIK 1771011204060001 atas nama Ahmad Fauzan)
+      // Aturan: Tetap mempertahankan data lama di database (tidak ditimpa dan tidak menjadi error)
       {
         'Nomor Pendaftaran': 'KIPK-2026-0504',
-        'Nama Lengkap': 'Ahmad Fauzan Duplikat',
-        'NIK': '1771011204060001', // Duplicate NIK in DB!
+        'Nama Lengkap': 'Ahmad Fauzan (Sudah Ada di Database)',
+        'NIK': '1771011204060001', // NIK sudah ada di DB -> Status EXISTING (Data Lama Dipertahankan)
         'NISN': '0065412891',
         'Pilihan Prodi 1': 'S1 Ilmu Hukum',
         'Pilihan Prodi 2': 'S1 Manajemen',
@@ -202,12 +203,35 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
         'Tahun Lulus': '2026',
         'Nomor WhatsApp': '081273849102',
         'Email': 'ahmad.fauzan@gmail.com',
-        'Desil': 'desil 1', // Huruf kecil -> dinormalisasi ke 'Desil 1'
+        'Desil': 'desil 1',
         'Nama Orang Tua': 'M. Yusuf',
         'Pekerjaan Orang Tua': 'Buruh',
         'Penghasilan': '950000',
         'Tanggungan': '4',
         'Alamat': 'Jl. Danau Dendam',
+        'Kota': 'Kota Bengkulu',
+        'Provinsi': 'Bengkulu'
+      },
+      // Row 5: No Registrasi sama dengan Row 1 ('KIPK-2026-0501')
+      // Aturan: Peringatan duplikat No Registrasi dalam file diabaikan saja lebih fleksibel
+      {
+        'Nomor Pendaftaran': 'KIPK-2026-0501', // No Registrasi sama dengan Row 1, diabaikan & diterima fleksibel
+        'Nama Lengkap': 'Eka Putri Rahayu',
+        'NIK': '1771035508060045',
+        'NISN': '0069988771',
+        'Pilihan Prodi 1': 'S1 Akuntansi',
+        'Pilihan Prodi 2': 'S1 Manajemen',
+        'Asal Sekolah': 'SMAN 4 Kota Bengkulu',
+        'Jurusan': 'IPS',
+        'Tahun Lulus': '2026',
+        'Nomor WhatsApp': '082188776655',
+        'Email': 'eka.putri@gmail.com',
+        'Desil': 'Desil 2',
+        'Nama Orang Tua': 'Rahayu',
+        'Pekerjaan Orang Tua': 'Wiraswasta',
+        'Penghasilan': '1100000',
+        'Tanggungan': '3',
+        'Alamat': 'Jl. Basuki Rahmat',
         'Kota': 'Kota Bengkulu',
         'Provinsi': 'Bengkulu'
       }
@@ -221,7 +245,6 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
   const validateAndSetRows = (rawRows: any[]) => {
     const validatedRows: ImportPreviewRow[] = [];
     const internalNiks = new Set<string>();
-    const internalRegs = new Set<string>();
 
     rawRows.forEach((row, index) => {
       const rowNum = index + 2; // header is row 1
@@ -231,7 +254,30 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
       const regNumber = String(row['Nomor Pendaftaran'] || row['regNumber'] || '').trim();
       const name = String(row['Nama Lengkap'] || row['Nama'] || row['name'] || '').trim();
       const nik = String(row['NIK'] || row['nik'] || '').replace(/[^0-9]/g, '');
-      const nisn = String(row['NISN'] || row['nisn'] || '').replace(/[^0-9]/g, '');
+
+      // ========================================================================
+      // Format NISN Lebih Fleksibel:
+      // Aturan: Jika NISN tidak 8-10 digit maka otomatis dianggap kosong penerapannya
+      // ========================================================================
+      const rawNisn = String(
+        row['NISN'] || row['nisn'] || row['Nomor Induk Siswa Nasional'] || row['No. NISN'] || ''
+      ).trim();
+      let nisn = '';
+      if (rawNisn) {
+        const trimmedNisnLower = rawNisn.toLowerCase();
+        const isPlaceholder = ['-', '--', 'tidak ada', 'none', 'n/a', 'kosong', 'null'].includes(trimmedNisnLower);
+        if (!isPlaceholder) {
+          const cleanDigits = rawNisn.replace(/[^0-9]/g, '');
+          if (cleanDigits.length >= 8 && cleanDigits.length <= 10) {
+            nisn = cleanDigits;
+          } else {
+            // Jika tidak 8-10 digit -> otomatis dianggap kosong penerapannya
+            nisn = '';
+            warnings.push(`NISN '${rawNisn}' bukan 8-10 digit (otomatis dianggap kosong)`);
+          }
+        }
+      }
+
       const schoolOrigin = String(row['Asal Sekolah'] || row['schoolOrigin'] || '').trim();
       const graduationYear = parseInt(row['Tahun Lulus'] || row['graduationYear']) || 2026;
       const parentName = String(row['Nama Orang Tua'] || row['parentName'] || 'Wali').trim();
@@ -393,7 +439,7 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
       }
 
       // ========================================================================
-      // 5. Validasi Standar Identitas Utama (Nama, NIK 16 digit, NISN)
+      // 5. Validasi Standar Identitas Utama (Nama, NIK 16 digit)
       // ========================================================================
       // Field Check: Name
       if (!name) {
@@ -405,50 +451,42 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
         errors.push(`NIK harus berupa 16 digit angka (ditemukan ${nik.length} digit)`);
       }
 
-      // Field Check: NISN 8-10 digits
-      if (nisn.length < 8 || nisn.length > 10) {
-        errors.push(`NISN harus berupa 8 sampai 10 digit angka (ditemukan ${nisn.length} digit)`);
-      }
+      // CATATAN: Format NISN lebih fleksibel telah diproses di atas:
+      // Jika NISN tidak 8-10 digit maka otomatis dianggap kosong penerapannya tanpa error fatal.
 
       // ========================================================================
-      // 6. Pemeriksaan Duplikasi (Internal File & Database)
+      // 6. Pemeriksaan Duplikasi & Pengecekan Data yang Sudah Pernah Diimpor
+      // Aturan Pengguna:
+      // - Peringatan duplikat No Registrasi dalam file diabaikan saja (lebih fleksibel)
+      // - Jika sudah pernah import data, ketika import lagi dan ada data yang sama (NIK sama),
+      //   maka sistem tetap mempertahankan data yang lama.
       // ========================================================================
-      let isDuplicate = false;
+      let isDuplicateInFile = false;
       if (internalNiks.has(nik)) {
-        errors.push(`Duplikat dalam file: NIK ${nik} muncul lebih dari satu kali`);
-        isDuplicate = true;
+        errors.push(`Duplikat dalam file: NIK ${nik} muncul lebih dari satu kali dalam berkas ini`);
+        isDuplicateInFile = true;
       } else if (nik) {
         internalNiks.add(nik);
       }
 
-      if (regNumber && internalRegs.has(regNumber.toLowerCase())) {
-        errors.push(`Duplikat dalam file: No Registrasi ${regNumber} ganda`);
-        isDuplicate = true;
-      } else if (regNumber) {
-        internalRegs.add(regNumber.toLowerCase());
-      }
-
-      // Check Duplicates: Database Check
+      // Cek apakah data sudah pernah ada di database sebelumnya (berdasarkan NIK)
       const dbDuplicateNik = existingParticipants.find((p) => p.nik === nik);
-      if (dbDuplicateNik) {
-        errors.push(`Duplikat Database: NIK ${nik} sudah terdaftar atas nama ${dbDuplicateNik.name}`);
-        isDuplicate = true;
-      }
+      const isExistingInDb = Boolean(dbDuplicateNik);
 
-      const dbDuplicateReg = existingParticipants.find(
-        (p) => p.regNumber.toLowerCase() === regNumber.toLowerCase()
-      );
-      if (dbDuplicateReg) {
-        errors.push(`Duplikat Database: No Registrasi ${regNumber} sudah ada di database`);
-        isDuplicate = true;
+      if (isExistingInDb && dbDuplicateNik) {
+        warnings.push(
+          `Sudah terdaftar di sistem atas nama "${dbDuplicateNik.name}" (${dbDuplicateNik.regNumber}). Data lama di database tetap dipertahankan.`
+        );
       }
 
       // Determine Status
-      let status: 'VALID' | 'ERROR' | 'DUPLICATE' = 'VALID';
-      if (isDuplicate) {
-        status = 'DUPLICATE';
-      } else if (errors.length > 0) {
+      let status: 'VALID' | 'ERROR' | 'DUPLICATE' | 'EXISTING' = 'VALID';
+      if (errors.length > 0) {
         status = 'ERROR';
+      } else if (isDuplicateInFile) {
+        status = 'DUPLICATE';
+      } else if (isExistingInDb) {
+        status = 'EXISTING';
       }
 
       validatedRows.push({
@@ -464,6 +502,7 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
         email,
         desil: normalizedDesil,
         status,
+        isExistingInDb,
         errors,
         warnings,
         rawPayload: {
@@ -537,30 +576,39 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
   // Filtered rows for preview table
   const filteredRows = parsedRows.filter((r) => {
     if (selectedTab === 'VALID') return r.status === 'VALID';
+    if (selectedTab === 'EXISTING') return r.status === 'EXISTING';
     if (selectedTab === 'ERROR') return r.status === 'ERROR';
     if (selectedTab === 'DUPLICATE') return r.status === 'DUPLICATE';
     return true;
   });
 
   const validRowsCount = parsedRows.filter((r) => r.status === 'VALID').length;
+  const existingRowsCount = parsedRows.filter((r) => r.status === 'EXISTING').length;
   const errorRowsCount = parsedRows.filter((r) => r.status === 'ERROR').length;
   const duplicateRowsCount = parsedRows.filter((r) => r.status === 'DUPLICATE').length;
 
   // Execute Database Transaction Import
   const handleExecuteImport = () => {
-    // Check if strict mode has errors
+    // Check if strict mode has fatal errors
+    // Catatan: Baris EXISTING bukan error dan tidak membatalkan transaksi karena data lama sengaja dipertahankan.
     if (transactionMode === 'STRICT' && (errorRowsCount > 0 || duplicateRowsCount > 0)) {
       setImportStatus('ROLLED_BACK');
       return;
     }
 
-    const rowsToImport =
-      transactionMode === 'STRICT'
-        ? parsedRows.map((r) => r.rawPayload)
-        : parsedRows.filter((r) => r.status === 'VALID').map((r) => r.rawPayload);
+    // Hanya baris baru yang berstatus VALID yang diimpor ke database
+    const rowsToImport = parsedRows
+      .filter((r) => r.status === 'VALID')
+      .map((r) => r.rawPayload);
 
     if (rowsToImport.length === 0) {
-      alert('Tidak ada baris valid yang dapat diimpor ke database.');
+      if (existingRowsCount > 0) {
+        alert(
+          `Semua ${existingRowsCount} data peserta dalam file ini sudah terdaftar sebelumnya di database. Sistem tetap mempertahankan data lama tanpa ada yang diubah.`
+        );
+      } else {
+        alert('Tidak ada baris baru yang valid untuk diimpor ke database.');
+      }
       return;
     }
 
@@ -664,7 +712,7 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
             className="w-full py-2 px-3 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs border border-amber-300 transition cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            <span>Muat Dataset Sampel Uji (4 Baris)</span>
+            <span>Muat Dataset Sampel Uji (5 Skenario Uji)</span>
           </button>
 
           <div className="text-[10px] text-slate-400 flex items-center gap-1">
@@ -678,29 +726,35 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
       {parsedRows.length > 0 && (
         <div className="space-y-4">
           {/* Status Metrics Bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
             <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Baris File</span>
               <div className="text-lg font-bold text-slate-900">{parsedRows.length} Baris</div>
-              <div className="text-[10px] text-slate-500">Termasuk header</div>
+              <div className="text-[10px] text-slate-500">Termasuk seluruh baris</div>
             </div>
 
             <div className="bg-white p-3.5 rounded-xl border border-emerald-200 shadow-xs bg-emerald-50/30">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Baris Valid (Siap Impor)</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Baris Baru (Siap Impor)</span>
               <div className="text-lg font-bold text-emerald-700">{validRowsCount} Baris</div>
-              <div className="text-[10px] text-emerald-600">Lolos semua aturan validasi</div>
+              <div className="text-[10px] text-emerald-600">Peserta baru belum terdaftar</div>
+            </div>
+
+            <div className="bg-white p-3.5 rounded-xl border border-blue-200 shadow-xs bg-blue-50/30">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700">Data Lama Dipertahankan</span>
+              <div className="text-lg font-bold text-blue-700">{existingRowsCount} Baris</div>
+              <div className="text-[10px] text-blue-600">Sudah di database, tidak ditimpa</div>
             </div>
 
             <div className="bg-white p-3.5 rounded-xl border border-rose-200 shadow-xs bg-rose-50/30">
               <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700">Format Error</span>
               <div className="text-lg font-bold text-rose-700">{errorRowsCount} Baris</div>
-              <div className="text-[10px] text-rose-600">NIK/NISN/Email cacat</div>
+              <div className="text-[10px] text-rose-600">NIK cacat / Prodi 1 salah</div>
             </div>
 
             <div className="bg-white p-3.5 rounded-xl border border-amber-200 shadow-xs bg-amber-50/30">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Duplikat Terdeteksi</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Duplikat File</span>
               <div className="text-lg font-bold text-amber-700">{duplicateRowsCount} Baris</div>
-              <div className="text-[10px] text-amber-600">Duplikat file atau database</div>
+              <div className="text-[10px] text-amber-600">NIK ganda dalam satu file</div>
             </div>
           </div>
 
@@ -761,7 +815,7 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
               <div>
                 <h4 className="font-bold text-emerald-900">Transaksi Database Berhasil (DB::commit)!</h4>
                 <p className="mt-1 leading-relaxed">
-                  Sebanyak <strong>{importedCount} data calon mahasiswa</strong> berhasil dimasukkan ke dalam database peserta KIP-Kuliah UNIHAZ. Mengarahkan kembali ke daftar peserta...
+                  Sebanyak <strong>{importedCount} data peserta baru</strong> berhasil dimasukkan ke dalam database. {existingRowsCount > 0 ? `Sebanyak ${existingRowsCount} data yang sudah ada sebelumnya tetap dipertahankan.` : ''} Mengarahkan kembali ke daftar peserta...
                 </p>
               </div>
             </div>
@@ -771,7 +825,7 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
           <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
             {/* Filter Tabs */}
             <div className="p-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 bg-slate-50">
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <button
                   onClick={() => setSelectedTab('ALL')}
                   className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
@@ -790,7 +844,17 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
                       : 'bg-white text-emerald-800 border border-emerald-300 hover:bg-emerald-50'
                   }`}
                 >
-                  Hanya Valid ({validRowsCount})
+                  Baris Baru ({validRowsCount})
+                </button>
+                <button
+                  onClick={() => setSelectedTab('EXISTING')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    selectedTab === 'EXISTING'
+                      ? 'bg-blue-700 text-white'
+                      : 'bg-white text-blue-800 border border-blue-300 hover:bg-blue-50'
+                  }`}
+                >
+                  Data Lama Dipertahankan ({existingRowsCount})
                 </button>
                 <button
                   onClick={() => setSelectedTab('ERROR')}
@@ -802,16 +866,18 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
                 >
                   Format Error ({errorRowsCount})
                 </button>
-                <button
-                  onClick={() => setSelectedTab('DUPLICATE')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                    selectedTab === 'DUPLICATE'
-                      ? 'bg-amber-700 text-white'
-                      : 'bg-white text-amber-800 border border-amber-300 hover:bg-amber-50'
-                  }`}
-                >
-                  Peringatan Duplikat ({duplicateRowsCount})
-                </button>
+                {duplicateRowsCount > 0 && (
+                  <button
+                    onClick={() => setSelectedTab('DUPLICATE')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      selectedTab === 'DUPLICATE'
+                        ? 'bg-amber-700 text-white'
+                        : 'bg-white text-amber-800 border border-amber-300 hover:bg-amber-50'
+                    }`}
+                  >
+                    Duplikat File ({duplicateRowsCount})
+                  </button>
+                )}
               </div>
 
               <div className="text-xs text-slate-500">
@@ -825,13 +891,13 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
                 <thead>
                   <tr className="bg-slate-100 text-slate-600 uppercase text-[10px] tracking-wider font-bold border-b border-slate-200 sticky top-0">
                     <th className="py-2.5 px-3 text-center w-14">Baris</th>
-                    <th className="py-2.5 px-3 text-center w-28">Status Verifikasi</th>
+                    <th className="py-2.5 px-3 text-center w-36">Status Verifikasi</th>
                     <th className="py-2.5 px-4">Nama Lengkap</th>
                     <th className="py-2.5 px-3 font-mono">NIK (16 Digit)</th>
                     <th className="py-2.5 px-3 font-mono">NISN</th>
                     <th className="py-2.5 px-4">Pilihan Prodi 1 & 2</th>
                     <th className="py-2.5 px-3 text-center">Desil</th>
-                    <th className="py-2.5 px-4">Laporan Error Validasi</th>
+                    <th className="py-2.5 px-4">Laporan Verifikasi / Catatan</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -841,6 +907,8 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
                       className={`hover:bg-slate-50 transition-colors ${
                         item.status === 'ERROR'
                           ? 'bg-rose-50/40'
+                          : item.status === 'EXISTING'
+                          ? 'bg-blue-50/40'
                           : item.status === 'DUPLICATE'
                           ? 'bg-amber-50/40'
                           : ''
@@ -857,6 +925,12 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
                             <span>Siap Impor</span>
                           </span>
                         )}
+                        {item.status === 'EXISTING' && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
+                            <CheckCircle2 className="w-3 h-3 text-blue-600" />
+                            <span>Data Lama Dipertahankan</span>
+                          </span>
+                        )}
                         {item.status === 'ERROR' && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
                             <XCircle className="w-3 h-3 text-rose-600" />
@@ -866,7 +940,7 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
                         {item.status === 'DUPLICATE' && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
                             <AlertTriangle className="w-3 h-3 text-amber-600" />
-                            <span>Duplikat</span>
+                            <span>Duplikat File</span>
                           </span>
                         )}
                       </td>
@@ -895,9 +969,11 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
                       </td>
 
                       <td className="py-2.5 px-3 font-mono text-[11px] whitespace-nowrap">
-                        <span className={item.nisn.length !== 10 ? 'text-rose-600 font-bold bg-rose-100 px-1 rounded' : 'text-slate-800'}>
-                          {item.nisn || '-'}
-                        </span>
+                        {item.nisn ? (
+                          <span className="text-slate-800">{item.nisn}</span>
+                        ) : (
+                          <span className="text-slate-400 italic font-sans font-normal text-[10px]">Kosong</span>
+                        )}
                       </td>
 
                       <td className="py-2.5 px-4 whitespace-nowrap text-[11px]">
@@ -971,13 +1047,17 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
             {/* Bottom Actions */}
             <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
               <div className="text-xs text-slate-600">
-                {transactionMode === 'STRICT' ? (
+                {validRowsCount > 0 ? (
                   <span>
-                    Mode Strict: Jika Anda menekan Simpan, seluruh <strong>{parsedRows.length} baris</strong> akan dimasukkan atau dibatalkan bersama-sama.
+                    Siap memasukkan <strong>{validRowsCount} data peserta baru</strong>. Sebanyak <strong>{existingRowsCount} data yang sudah ada</strong> tetap dipertahankan di database tanpa perubahan.
+                  </span>
+                ) : existingRowsCount > 0 ? (
+                  <span className="text-blue-800 font-medium">
+                    Semua <strong>{existingRowsCount} data dalam berkas ini</strong> sudah ada di database. Sistem tetap mempertahankan data lama secara utuh.
                   </span>
                 ) : (
                   <span>
-                    Mode Skip Errors: Hanya <strong>{validRowsCount} baris valid</strong> yang akan dimasukkan ke database.
+                    Tidak ada baris valid baru untuk diimpor.
                   </span>
                 )}
               </div>
@@ -994,18 +1074,20 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
                 <button
                   type="button"
                   onClick={handleExecuteImport}
-                  disabled={isProcessing || importStatus === 'SUCCESS' || (transactionMode === 'PARTIAL' && validRowsCount === 0)}
+                  disabled={isProcessing || importStatus === 'SUCCESS' || validRowsCount === 0}
                   className={`px-5 py-2 rounded-lg font-bold text-xs shadow-xs transition flex items-center gap-2 cursor-pointer ${
-                    transactionMode === 'STRICT' && (errorRowsCount > 0 || duplicateRowsCount > 0)
+                    validRowsCount === 0
+                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                      : transactionMode === 'STRICT' && (errorRowsCount > 0 || duplicateRowsCount > 0)
                       ? 'bg-rose-600 hover:bg-rose-700 text-white'
                       : 'bg-emerald-600 hover:bg-emerald-500 text-white'
                   }`}
                 >
                   <Database className="w-3.5 h-3.5" />
                   <span>
-                    {transactionMode === 'STRICT'
-                      ? 'Eksekusi Import (DB::transaction)'
-                      : `Eksekusi Import (${validRowsCount} Baris Valid)`}
+                    {validRowsCount > 0
+                      ? `Eksekusi Import (${validRowsCount} Data Baru)`
+                      : 'Semua Data Lama Dipertahankan'}
                   </span>
                 </button>
               </div>

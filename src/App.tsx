@@ -363,10 +363,21 @@ export default function App() {
 
   const handleImportSuccess = (newItems: Participant[]) => {
     setParticipants((prev) => [...newItems, ...prev]);
+    if (newItems.length > 0) {
+      api.batchUpdateParticipants(newItems).catch((err) => console.error('API batch import error:', err));
+      addAuditLog({
+        module: 'MASTER_DATA',
+        action: 'Import Data Masal Calon Peserta',
+        changedBy: currentUser?.name || 'Admin',
+        role: currentUser?.role || 'Super Admin',
+        details: `Berhasil mengimpor ${newItems.length} data peserta baru ke sistem. Data peserta yang telah ada sebelumnya tetap dipertahankan.`,
+        severity: 'info',
+      });
+    }
     showToast(
       'success',
-      'Import Transaksi Berhasil',
-      `Sebanyak ${newItems.length} data peserta baru berhasil dimasukkan melalui DB::transaction.`
+      'Import Berhasil',
+      `Sebanyak ${newItems.length} data peserta baru berhasil dimasukkan. Data peserta yang sudah ada tetap dipertahankan.`
     );
     setActiveRoute('participants');
   };
