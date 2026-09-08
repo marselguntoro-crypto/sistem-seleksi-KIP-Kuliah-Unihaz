@@ -465,11 +465,13 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
               className="w-full text-xs py-1.5 px-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-800"
             >
               <option value="ALL">Semua Desil</option>
+              <option value="Non-Desil">Non-Desil</option>
               <option value="Desil 1">Desil 1 (Ekstrem)</option>
-              <option value="Desil 2">Desil 2 (Miskin)</option>
-              <option value="Desil 3">Desil 3 (Hampir)</option>
+              <option value="Desil 2">Desil 2 (Sangat Miskin)</option>
+              <option value="Desil 3">Desil 3 (Hampir Miskin)</option>
               <option value="Desil 4">Desil 4 (Rentan)</option>
-              <option value="P3KE">P3KE/SKTM</option>
+              <option value="Desil 5">Desil 5 (Menengah Bawah)</option>
+              <option value="Desil 6-10">Desil 6-10 (Menengah ke Atas)</option>
             </select>
           </div>
 
@@ -714,10 +716,16 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
                             item.desil === 'Desil 1'
                               ? 'bg-rose-100 text-rose-800 border border-rose-300'
                               : item.desil === 'Desil 2'
-                              ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                              ? 'bg-orange-100 text-orange-800 border border-orange-300'
                               : item.desil === 'Desil 3'
+                              ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                              : item.desil === 'Desil 4'
                               ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
-                              : 'bg-blue-100 text-blue-800 border border-blue-300'
+                              : item.desil === 'Desil 5'
+                              ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                              : item.desil === 'Desil 6-10'
+                              ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                              : 'bg-slate-100 text-slate-700 border border-slate-300'
                           }`}
                         >
                           {item.desil}

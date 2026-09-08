@@ -57,7 +57,7 @@ export const ParticipantFormModal: React.FC<ParticipantFormModalProps> = ({
     address: '',
     city: 'Kota Bengkulu',
     province: 'Bengkulu',
-    desil: 'Desil 1' as 'Desil 1' | 'Desil 2' | 'Desil 3' | 'Desil 4' | 'P3KE',
+    desil: 'Desil 1' as 'Non-Desil' | 'Desil 1' | 'Desil 2' | 'Desil 3' | 'Desil 4' | 'Desil 5' | 'Desil 6-10',
     parentName: '',
     parentJob: '',
     parentIncome: 1000000,
@@ -133,10 +133,10 @@ export const ParticipantFormModal: React.FC<ParticipantFormModalProps> = ({
       return;
     }
 
-    // Validation 3: NISN 10 digits
+    // Validation 3: NISN 8-10 digits
     const cleanNisn = formData.nisn.replace(/[^0-9]/g, '');
-    if (cleanNisn.length !== 10) {
-      setErrorMessage(`NISN harus berupa 10 digit angka (saat ini ${cleanNisn.length} digit)`);
+    if (cleanNisn.length < 8 || cleanNisn.length > 10) {
+      setErrorMessage(`NISN harus berupa 8 sampai 10 digit angka (saat ini ${cleanNisn.length} digit)`);
       setActiveTab('IDENTITAS');
       return;
     }
@@ -340,13 +340,13 @@ export const ParticipantFormModal: React.FC<ParticipantFormModalProps> = ({
                       type="text"
                       required
                       maxLength={10}
-                      placeholder="10 digit angka (contoh: 0065412891)"
+                      placeholder="8–10 digit angka (contoh: 0065412891)"
                       value={formData.nisn}
                       onChange={(e) => setFormData({ ...formData, nisn: e.target.value.replace(/[^0-9]/g, '') })}
                       className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-800 font-mono"
                     />
                     <span className="text-[10px] text-slate-400">
-                      Jumlah digit: {formData.nisn.length}/10
+                      Jumlah digit: {formData.nisn.length} (wajib 8–10 digit)
                     </span>
                   </div>
                 </div>
@@ -507,11 +507,13 @@ export const ParticipantFormModal: React.FC<ParticipantFormModalProps> = ({
                       onChange={(e) => setFormData({ ...formData, desil: e.target.value as any })}
                       className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-800 font-bold text-rose-600"
                     >
-                      <option value="Desil 1">Desil 1 (Sangat Miskin / Desil Ekstrem)</option>
+                      <option value="Non-Desil">Non-Desil</option>
+                      <option value="Desil 1">Desil 1 (Sangat Miskin / Ekstrem)</option>
                       <option value="Desil 2">Desil 2 (Miskin)</option>
                       <option value="Desil 3">Desil 3 (Hampir Miskin)</option>
                       <option value="Desil 4">Desil 4 (Rentan Miskin)</option>
-                      <option value="P3KE">Non-Desil / SKTM Mandiri</option>
+                      <option value="Desil 5">Desil 5 (Menengah Bawah)</option>
+                      <option value="Desil 6-10">Desil 6-10 (Menengah ke Atas)</option>
                     </select>
                   </div>
 

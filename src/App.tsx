@@ -335,13 +335,15 @@ export default function App() {
     showToast('success', 'Data Diperbarui', `Data peserta ${updated.name} berhasil diperbarui.`);
   };
 
-  const handleBatchUpdateParticipants = async (updatedList: Participant[]) => {
-    setParticipants(updatedList);
-    api.batchUpdateParticipants(updatedList).catch(err => console.error('Failed to batch sync:', err));
+  const handleBatchUpdateParticipants = async (updatedList: Participant[], customMessage?: string) => {
+    if (updatedList.length === 0) return;
+    const updatedMap = new Map(updatedList.map((p) => [p.id, p]));
+    setParticipants((prev) => prev.map((p) => updatedMap.get(p.id) || p));
+    api.batchUpdateParticipants(updatedList).catch((err) => console.error('Failed to batch sync:', err));
     showToast(
       'success',
-      'Penetapan Hasil Berhasil',
-      `Status kelulusan dan ranking ${updatedList.length} peserta telah berhasil diperbarui sesuai kuota prodi.`
+      'Pembaruan Data Berhasil',
+      customMessage || `Sebanyak ${updatedList.length} data peserta telah berhasil diperbarui ke sistem.`
     );
   };
 
@@ -850,6 +852,7 @@ export default function App() {
                 studyPrograms={studyPrograms}
                 currentUser={currentUser}
                 onUpdateParticipant={handleUpdateParticipant}
+                onBatchUpdateParticipants={handleBatchUpdateParticipants}
               />
             ) : activeRoute === 'interview' ? (
               <InterviewScoreView

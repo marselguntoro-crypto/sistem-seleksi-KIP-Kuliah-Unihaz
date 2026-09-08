@@ -62,11 +62,16 @@ export const getDesilAffirmationScore = (desil: DesilCategory | string): number 
       return 80;
     case 'Desil 4':
       return 70;
+    case 'Desil 5':
+      return 60;
+    case 'Desil 6-10':
+      return 45;
+    case 'Non-Desil':
+    case 'Non Desil':
     case 'P3KE':
-      return 85;
     case 'Non-Desil (P3KE)':
     default:
-      return 60;
+      return 35;
   }
 };
 

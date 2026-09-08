@@ -76,8 +76,16 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
                     participant.desil === 'Desil 1'
                       ? 'bg-rose-500 text-white'
                       : participant.desil === 'Desil 2'
+                      ? 'bg-orange-500 text-white'
+                      : participant.desil === 'Desil 3'
                       ? 'bg-amber-500 text-white'
-                      : 'bg-blue-500 text-white'
+                      : participant.desil === 'Desil 4'
+                      ? 'bg-yellow-500 text-slate-900'
+                      : participant.desil === 'Desil 5'
+                      ? 'bg-blue-500 text-white'
+                      : participant.desil === 'Desil 6-10'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-slate-500 text-white'
                   }`}
                 >
                   {participant.desil}

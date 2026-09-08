@@ -159,7 +159,7 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
         'Tahun Lulus': '2026',
         'Nomor WhatsApp': '081234', // Error: too short
         'Email': 'danang-tanpa-domain', // Error: invalid email
-        'Desil': 'Desil 9', // Error: invalid desil
+        'Desil': 'Desil 15', // Error: invalid desil (valid: Non-Desil, Desil 1-5, Desil 6-10)
         'Nama Orang Tua': 'Prasetyo',
         'Pekerjaan Orang Tua': 'Karyawan',
         'Penghasilan': '1500000',
@@ -235,9 +235,9 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
         errors.push(`NIK harus berupa 16 digit angka (ditemukan ${nik.length} digit)`);
       }
 
-      // Field Check: NISN 10 digits
-      if (nisn.length !== 10) {
-        errors.push(`NISN harus berupa 10 digit angka (ditemukan ${nisn.length} digit)`);
+      // Field Check: NISN 8-10 digits
+      if (nisn.length < 8 || nisn.length > 10) {
+        errors.push(`NISN harus berupa 8 sampai 10 digit angka (ditemukan ${nisn.length} digit)`);
       }
 
       // Field Check: Phone
@@ -251,10 +251,17 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
         errors.push(`Format email '${email}' tidak valid`);
       }
 
-      // Check Desil
-      const validDesils = ['Desil 1', 'Desil 2', 'Desil 3', 'Desil 4', 'P3KE'];
-      if (!validDesils.includes(desil)) {
-        errors.push(`Desil '${desil}' tidak valid. Harus antara Desil 1 s/d 4 atau P3KE`);
+      // Normalize and Check Desil (Non-Desil, Desil 1, 2, 3, 4, 5, Desil 6-10)
+      let normalizedDesil = desil;
+      if (['Desil 6', 'Desil 7', 'Desil 8', 'Desil 9', 'Desil 10', 'Desil 6-10', '6-10', 'Desil 6 - 10'].includes(desil)) {
+        normalizedDesil = 'Desil 6-10';
+      } else if (['Non Desil', 'Non-Desil', 'P3KE', 'SKTM', 'Non-Desil (P3KE)', 'Non desil'].includes(desil)) {
+        normalizedDesil = 'Non-Desil';
+      }
+
+      const validDesils = ['Non-Desil', 'Desil 1', 'Desil 2', 'Desil 3', 'Desil 4', 'Desil 5', 'Desil 6-10'];
+      if (!validDesils.includes(normalizedDesil)) {
+        errors.push(`Desil '${desil}' tidak valid. Pilihan valid: Non-Desil, Desil 1, Desil 2, Desil 3, Desil 4, Desil 5, atau Desil 6-10`);
       }
 
       // Match Prodi 1
@@ -327,7 +334,7 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
         schoolOrigin,
         phone,
         email,
-        desil,
+        desil: normalizedDesil,
         status,
         errors,
         rawPayload: {
@@ -350,7 +357,7 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
           address,
           city,
           province,
-          desil: desil as any,
+          desil: normalizedDesil as any,
           parentName,
           parentJob,
           parentIncome,
