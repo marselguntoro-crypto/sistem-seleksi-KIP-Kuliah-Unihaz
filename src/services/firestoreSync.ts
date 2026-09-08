@@ -153,6 +153,70 @@ export function subscribeToWeights(callback: (weights: SelectionWeights) => void
   });
 }
 
+export function subscribeToAcademicYears(callback: (years: AcademicYear[]) => void) {
+  const colRef = collection(db, 'academic_years');
+  return onSnapshot(colRef, (snapshot) => {
+    if (!snapshot.empty) {
+      const items: AcademicYear[] = [];
+      snapshot.forEach((docSnap) => {
+        items.push(docSnap.data() as AcademicYear);
+      });
+      items.sort((a, b) => a.id - b.id);
+      callback(items);
+    }
+  }, (err) => {
+    console.warn('Firestore academic years subscription error:', err);
+  });
+}
+
+export function subscribeToFaculties(callback: (faculties: Faculty[]) => void) {
+  const colRef = collection(db, 'faculties');
+  return onSnapshot(colRef, (snapshot) => {
+    if (!snapshot.empty) {
+      const items: Faculty[] = [];
+      snapshot.forEach((docSnap) => {
+        items.push(docSnap.data() as Faculty);
+      });
+      items.sort((a, b) => a.id - b.id);
+      callback(items);
+    }
+  }, (err) => {
+    console.warn('Firestore faculties subscription error:', err);
+  });
+}
+
+export function subscribeToStudyPrograms(callback: (prodis: StudyProgram[]) => void) {
+  const colRef = collection(db, 'study_programs');
+  return onSnapshot(colRef, (snapshot) => {
+    if (!snapshot.empty) {
+      const items: StudyProgram[] = [];
+      snapshot.forEach((docSnap) => {
+        items.push(docSnap.data() as StudyProgram);
+      });
+      items.sort((a, b) => a.id - b.id);
+      callback(items);
+    }
+  }, (err) => {
+    console.warn('Firestore study programs subscription error:', err);
+  });
+}
+
+export function subscribeToUsers(callback: (users: User[]) => void) {
+  const colRef = collection(db, 'users');
+  return onSnapshot(colRef, (snapshot) => {
+    if (!snapshot.empty) {
+      const items: User[] = [];
+      snapshot.forEach((docSnap) => {
+        items.push(docSnap.data() as User);
+      });
+      items.sort((a, b) => a.id - b.id);
+      callback(items);
+    }
+  }, (err) => {
+    console.warn('Firestore users subscription error:', err);
+  });
+}
+
 // -------------------------------------------------------------
 // CRUD Operations directly using Firestore
 // -------------------------------------------------------------

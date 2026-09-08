@@ -23,7 +23,15 @@ import {
 import { INITIAL_AUDIT_LOGS, INITIAL_BACKUPS } from './data/initialAuditAndBackup';
 import { DEFAULT_SELECTION_WEIGHTS, calculateParticipantFinalScore } from './utils/selectionUtils';
 import { api } from './utils/api';
-import { subscribeToParticipants, subscribeToWeights, subscribeToAuditLogs } from './services/firestoreSync';
+import { 
+  subscribeToParticipants, 
+  subscribeToWeights, 
+  subscribeToAuditLogs,
+  subscribeToAcademicYears,
+  subscribeToFaculties,
+  subscribeToStudyPrograms,
+  subscribeToUsers
+} from './services/firestoreSync';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { DashboardView } from './components/DashboardView';
@@ -163,11 +171,44 @@ export default function App() {
       }
     });
 
+    const unsubYears = subscribeToAcademicYears((liveYears) => {
+      if (isMounted && liveYears.length > 0) {
+        setAcademicYears(liveYears);
+      }
+    });
+
+    const unsubFaculties = subscribeToFaculties((liveFaculties) => {
+      if (isMounted && liveFaculties.length > 0) {
+        setFaculties(liveFaculties);
+      }
+    });
+
+    const unsubProdis = subscribeToStudyPrograms((liveProdis) => {
+      if (isMounted && liveProdis.length > 0) {
+        setStudyPrograms(liveProdis);
+      }
+    });
+
+    const unsubUsers = subscribeToUsers((liveUsers) => {
+      if (isMounted && liveUsers.length > 0) {
+        setUsers(liveUsers);
+        setCurrentUser((prev) => {
+          if (!prev) return null;
+          const matched = liveUsers.find((u) => u.username === prev.username || u.id === prev.id);
+          return matched || prev;
+        });
+      }
+    });
+
     return () => {
       isMounted = false;
       unsubParticipants();
       unsubWeights();
       unsubAudits();
+      unsubYears();
+      unsubFaculties();
+      unsubProdis();
+      unsubUsers();
     };
   }, []);
 
@@ -252,7 +293,7 @@ export default function App() {
   };
 
   const handleUpdateParticipant = async (updated: Participant) => {
-    setParticipants(participants.map((p) => (p.id === updated.id ? updated : p)));
+    setParticipants((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
     api.updateParticipant(updated).catch(err => console.error('Failed to sync participant update:', err));
     showToast('success', 'Data Diperbarui', `Data peserta ${updated.name} berhasil diperbarui.`);
   };
@@ -291,7 +332,9 @@ export default function App() {
     if (newYear.isActive) {
       list = list.map((y) => ({ ...y, isActive: false }));
     }
-    setAcademicYears([...list, { ...newYear, id: nextId }]);
+    const created = { ...newYear, id: nextId };
+    setAcademicYears([...list, created]);
+    api.createAcademicYear(newYear).catch((err) => console.error('API create academic year error:', err));
     showToast('success', 'Tahun Akademik Ditambahkan', `Tahun akademik ${newYear.code} berhasil dibuat.`);
   };
 
@@ -303,6 +346,7 @@ export default function App() {
       list = list.map((y) => (y.id === updated.id ? updated : y));
     }
     setAcademicYears(list);
+    api.updateAcademicYear(updated).catch((err) => console.error('API update academic year error:', err));
     showToast('success', 'Tahun Akademik Diperbarui', `Data tahun akademik ${updated.code} berhasil diperbarui.`);
   };
 
@@ -313,6 +357,7 @@ export default function App() {
       return { success: false, message: 'Tahun akademik yang sedang aktif tidak dapat dihapus.' };
     }
     setAcademicYears((prev) => prev.filter((y) => y.id !== id));
+    api.deleteAcademicYear(id).catch((err) => console.error('API delete academic year error:', err));
     showToast('success', 'Tahun Akademik Dihapus', 'Data tahun akademik telah dihapus.');
     return { success: true, message: 'Data tahun akademik telah dihapus.' };
   };
@@ -327,18 +372,23 @@ export default function App() {
       return y;
     });
     setAcademicYears(list);
+    const updatedTarget = { ...target, isActive: nextState };
+    api.updateAcademicYear(updatedTarget).catch((err) => console.error('API toggle academic year error:', err));
     showToast('success', 'Status Diubah', `Tahun akademik ${target.code} kini ${nextState ? 'AKTIF' : 'NONAKTIF'}.`);
   };
 
   // Master Data Faculties Handlers
   const handleAddFaculty = (newFaculty: Omit<Faculty, 'id'>) => {
     const nextId = faculties.length > 0 ? Math.max(...faculties.map((f) => f.id)) + 1 : 1;
-    setFaculties([...faculties, { ...newFaculty, id: nextId }]);
+    const created = { ...newFaculty, id: nextId };
+    setFaculties([...faculties, created]);
+    api.createFaculty(newFaculty).catch((err) => console.error('API create faculty error:', err));
     showToast('success', 'Fakultas Ditambahkan', `${newFaculty.name} berhasil ditambahkan.`);
   };
 
   const handleUpdateFaculty = (updated: Faculty) => {
     setFaculties(faculties.map((f) => (f.id === updated.id ? updated : f)));
+    api.updateFaculty(updated).catch((err) => console.error('API update faculty error:', err));
     showToast('success', 'Fakultas Diperbarui', `Data ${updated.name} berhasil disimpan.`);
   };
 
@@ -350,23 +400,31 @@ export default function App() {
       return { success: false, message: `Fakultas "${target?.name || ''}" masih menaungi Program Studi aktif.` };
     }
     setFaculties((prev) => prev.filter((f) => f.id !== id));
+    api.deleteFaculty(id).catch((err) => console.error('API delete faculty error:', err));
     showToast('success', 'Fakultas Dihapus', `${target?.name || ''} berhasil dihapus.`);
     return { success: true, message: `${target?.name || ''} berhasil dihapus.` };
   };
 
   const handleToggleFacultyActive = (id: number) => {
-    setFaculties(faculties.map((f) => (f.id === id ? { ...f, isActive: !f.isActive } : f)));
+    const target = faculties.find((f) => f.id === id);
+    if (!target) return;
+    const updated = { ...target, isActive: !target.isActive };
+    setFaculties(faculties.map((f) => (f.id === id ? updated : f)));
+    api.updateFaculty(updated).catch((err) => console.error('API toggle faculty error:', err));
   };
 
   // Master Data Study Programs Handlers
   const handleAddStudyProgram = (newProdi: Omit<StudyProgram, 'id'>) => {
     const nextId = studyPrograms.length > 0 ? Math.max(...studyPrograms.map((p) => p.id)) + 1 : 1;
-    setStudyPrograms([...studyPrograms, { ...newProdi, id: nextId }]);
+    const created = { ...newProdi, id: nextId };
+    setStudyPrograms([...studyPrograms, created]);
+    api.createStudyProgram(newProdi).catch((err) => console.error('API create study program error:', err));
     showToast('success', 'Program Studi Ditambahkan', `${newProdi.name} berhasil disimpan.`);
   };
 
   const handleUpdateStudyProgram = (updated: StudyProgram) => {
     setStudyPrograms(studyPrograms.map((p) => (p.id === updated.id ? updated : p)));
+    api.updateStudyProgram(updated).catch((err) => console.error('API update study program error:', err));
     showToast('success', 'Program Studi Diperbarui', `Data ${updated.name} berhasil diperbarui.`);
   };
 
@@ -384,12 +442,17 @@ export default function App() {
       return { success: false, message: `Program Studi "${target?.name || ''}" sudah dipilih oleh pendaftar KIP-Kuliah.` };
     }
     setStudyPrograms((prev) => prev.filter((p) => p.id !== id));
+    api.deleteStudyProgram(id).catch((err) => console.error('API delete study program error:', err));
     showToast('success', 'Program Studi Dihapus', `${target?.name || ''} berhasil dihapus.`);
     return { success: true, message: `${target?.name || ''} berhasil dihapus.` };
   };
 
   const handleToggleStudyProgramActive = (id: number) => {
-    setStudyPrograms(studyPrograms.map((p) => (p.id === id ? { ...p, isActive: !p.isActive } : p)));
+    const target = studyPrograms.find((p) => p.id === id);
+    if (!target) return;
+    const updated = { ...target, isActive: !target.isActive };
+    setStudyPrograms(studyPrograms.map((p) => (p.id === id ? updated : p)));
+    api.updateStudyProgram(updated).catch((err) => console.error('API toggle study program error:', err));
   };
 
   // User / Operator Management Handlers
@@ -400,6 +463,7 @@ export default function App() {
       id: nextId
     };
     setUsers((prev) => [...prev, createdUser]);
+    api.createUser(newUser).catch((err) => console.error('API create user error:', err));
     showToast(
       'success',
       'Operator Ditambahkan',
@@ -412,6 +476,7 @@ export default function App() {
     if (currentUser?.id === updatedUser.id) {
       setCurrentUser(updatedUser);
     }
+    api.updateUser(updatedUser).catch((err) => console.error('API update user error:', err));
     showToast(
       'success',
       'Operator Diperbarui',
@@ -430,6 +495,7 @@ export default function App() {
       return;
     }
     setUsers((prev) => prev.filter((u) => u.id !== userId));
+    api.deleteUser(userId).catch((err) => console.error('API delete user error:', err));
     showToast(
       'success',
       'Operator Dihapus',
@@ -442,20 +508,18 @@ export default function App() {
       showToast('warning', 'Peringatan', 'Status Super Admin Utama tidak dapat dinonaktifkan.');
       return;
     }
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id === userId) {
-          const nextState = !u.isActive;
-          showToast(
-            'success',
-            'Status Akun Diubah',
-            `Akun @${u.username} sekarang ${nextState ? 'AKTIF' : 'NONAKTIF'}.`
-          );
-          return { ...u, isActive: nextState };
-        }
-        return u;
-      })
-    );
+    const target = users.find((u) => u.id === userId);
+    if (target) {
+      const nextState = !target.isActive;
+      const updatedUser = { ...target, isActive: nextState };
+      setUsers((prev) => prev.map((u) => (u.id === userId ? updatedUser : u)));
+      api.updateUser(updatedUser).catch((err) => console.error('API toggle user error:', err));
+      showToast(
+        'success',
+        'Status Akun Diubah',
+        `Akun @${target.username} sekarang ${nextState ? 'AKTIF' : 'NONAKTIF'}.`
+      );
+    }
   };
 
   // Selection Weights & Audit Handlers
