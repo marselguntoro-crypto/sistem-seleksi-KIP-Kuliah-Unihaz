@@ -19,12 +19,14 @@ import {
   Info
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { ImportVerificationModal } from '../selection/ImportVerificationModal';
 
 interface ImportExcelViewProps {
   existingParticipants: Participant[];
   studyPrograms: StudyProgram[];
   academicYears: AcademicYear[];
   onImportSuccess: (newParticipants: Participant[]) => void;
+  onBatchUpdateParticipants?: (updatedParticipants: Participant[]) => void;
   onCancel: () => void;
 }
 
@@ -33,6 +35,7 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
   studyPrograms,
   academicYears,
   onImportSuccess,
+  onBatchUpdateParticipants,
   onCancel,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -45,6 +48,7 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
   const [transactionMode, setTransactionMode] = useState<'STRICT' | 'PARTIAL'>('STRICT');
   const [importStatus, setImportStatus] = useState<'IDLE' | 'SUCCESS' | 'ROLLED_BACK'>('IDLE');
   const [importedCount, setImportedCount] = useState(0);
+  const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
 
   // Template Downloader
   const handleDownloadTemplate = () => {
@@ -648,8 +652,18 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
+            type="button"
+            onClick={() => setIsVerificationModalOpen(true)}
+            className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer whitespace-nowrap"
+            title="Upload data pemeriksaan berkas verifikator"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Import Data Verifikasi Berkas</span>
+          </button>
+          <button
+            type="button"
             onClick={handleDownloadTemplate}
             className="px-3.5 py-2 rounded-lg bg-yellow-400 hover:bg-yellow-300 text-blue-950 font-bold text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer whitespace-nowrap"
           >
@@ -1095,6 +1109,17 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
           </div>
         </div>
       )}
+      {/* Verification Import Modal */}
+      <ImportVerificationModal
+        isOpen={isVerificationModalOpen}
+        onClose={() => setIsVerificationModalOpen(false)}
+        participants={existingParticipants}
+        onBatchUpdate={(updatedList) => {
+          if (onBatchUpdateParticipants) {
+            onBatchUpdateParticipants(updatedList);
+          }
+        }}
+      />
     </div>
   );
 };

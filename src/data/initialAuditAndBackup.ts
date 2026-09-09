@@ -1,4 +1,4 @@
-import { SelectionAuditLog, DatabaseBackupItem } from '../types';
+import { SelectionAuditLog, DatabaseBackupItem } from '../types.ts';
 
 export const INITIAL_AUDIT_LOGS: SelectionAuditLog[] = [
   {

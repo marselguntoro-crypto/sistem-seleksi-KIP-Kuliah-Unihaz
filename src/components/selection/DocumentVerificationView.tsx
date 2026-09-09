@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Participant, StudyProgram, User } from '../../types';
 import { STANDARD_DOCUMENT_REQUIREMENTS } from '../../utils/selectionUtils';
+import { ImportVerificationModal } from './ImportVerificationModal';
 import {
   ClipboardCheck,
   Search,
@@ -17,6 +18,7 @@ import {
   AlertCircle,
   Calendar,
   Save,
+  Upload,
   X
 } from 'lucide-react';
 
@@ -25,13 +27,15 @@ interface DocumentVerificationViewProps {
   studyPrograms: StudyProgram[];
   currentUser: User;
   onUpdateParticipant: (participant: Participant) => void;
+  onBatchUpdateParticipants?: (updatedParticipants: Participant[]) => void;
 }
 
 export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> = ({
   participants,
   studyPrograms,
   currentUser,
-  onUpdateParticipant
+  onUpdateParticipant,
+  onBatchUpdateParticipants
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -42,9 +46,11 @@ export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> =
   const [receiver, setReceiver] = useState('');
   const [receivedDate, setReceivedDate] = useState('');
   const [checker, setChecker] = useState('');
+  const [checkedDate, setCheckedDate] = useState('');
   const [notes, setNotes] = useState('');
   const [docStatus, setDocStatus] = useState<Participant['documentStatus']>('Belum Diverifikasi');
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Quick stats
   const stats = useMemo(() => {
@@ -84,6 +90,7 @@ export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> =
     setReceiver(p.documentReceiver || currentUser.name);
     setReceivedDate(p.documentReceivedDate || new Date().toISOString().split('T')[0]);
     setChecker(p.documentChecker || currentUser.name);
+    setCheckedDate(p.documentCheckedDate || p.documentReceivedDate || new Date().toISOString().split('T')[0]);
     setNotes(p.documentNotes || p.notes || '');
     setDocStatus(p.documentStatus);
 
@@ -124,6 +131,7 @@ export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> =
       documentReceiver: receiver,
       documentReceivedDate: receivedDate,
       documentChecker: checker,
+      documentCheckedDate: checkedDate,
       documentNotes: notes,
       documentChecklist: checklist,
       updatedAt: new Date().toISOString()
@@ -153,8 +161,17 @@ export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> =
           </div>
         </div>
 
-        {/* Quick Stat Badges */}
-        <div className="flex flex-wrap gap-2 text-xs">
+        {/* Quick Stat Badges & Import Button */}
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <button
+            type="button"
+            onClick={() => setIsImportModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold shadow-xs hover:shadow-sm transition cursor-pointer"
+            title="Import data verifikasi berkas via Excel (.xlsx / .xls / .csv)"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>Import Verifikasi Berkas</span>
+          </button>
           <span className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-md font-semibold border border-slate-200">
             Total: {stats.total}
           </span>
@@ -275,11 +292,19 @@ export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> =
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-1.5">
-                        <UserCheck className="w-3.5 h-3.5 text-slate-400" />
+                        <UserCheck className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         <span className="font-medium text-slate-700">
                           {p.documentChecker || 'Belum ditugaskan'}
                         </span>
                       </div>
+                      {p.documentCheckedDate ? (
+                        <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-0.5 font-medium">
+                          <Calendar className="w-3 h-3 text-blue-600 shrink-0" />
+                          <span>Tgl Cek: {p.documentCheckedDate}</span>
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-slate-400 mt-0.5">Tgl Cek: -</div>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-center">
                       {p.documentStatus === 'Lengkap' && (
@@ -387,7 +412,7 @@ export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> =
               </div>
 
               {/* Administrative Officers */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                     Petugas Penerima
@@ -420,6 +445,17 @@ export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> =
                     value={checker}
                     onChange={(e) => setChecker(e.target.value)}
                     placeholder="Nama Petugas Pemeriksa"
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Tanggal Petugas Verifikator / Pengecek
+                  </label>
+                  <input
+                    type="date"
+                    value={checkedDate}
+                    onChange={(e) => setCheckedDate(e.target.value)}
                     className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs focus:ring-1 focus:ring-blue-600 focus:outline-none"
                   />
                 </div>
@@ -575,6 +611,21 @@ export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> =
           </div>
         </div>
       )}
+
+      {/* Import Verification Modal */}
+      <ImportVerificationModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        participants={participants}
+        onBatchUpdate={(updatedList) => {
+          if (onBatchUpdateParticipants) {
+            onBatchUpdateParticipants(updatedList);
+          } else {
+            updatedList.forEach(onUpdateParticipant);
+          }
+        }}
+        currentUserName={currentUser.name}
+      />
     </div>
   );
 };

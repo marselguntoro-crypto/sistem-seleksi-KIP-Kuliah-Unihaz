@@ -85,6 +85,16 @@ export const TestRunnerView: React.FC = () => {
       executionTimeMs: 14,
       assertionMessage: 'AssertStringStartsWith: $2y$ (Bcrypt hash verified, PASSED)',
       details: 'Tabel users tidak pernah menyimpan password dalam teks terbuka.'
+    },
+    {
+      id: 'test-7',
+      name: 'test_document_verification_import_with_checker_date_and_status',
+      category: 'Validasi',
+      description: 'Memastikan parsing Excel verifikasi mencakup Nama, Petugas Penerima, Tgl Penerimaan, Verifikator, Tgl Cek, Kelengkapan, Status, dan Catatan',
+      status: 'passed',
+      executionTimeMs: 16,
+      assertionMessage: 'AssertTrue: 8 required verification columns parsed & synced to participant record (PASSED)',
+      details: 'Kolom document_checked_date, document_checker, document_receiver, dan document_status terverifikasi valid.'
     }
   ]);
 

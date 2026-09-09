@@ -86,6 +86,7 @@ export const participants = pgTable("participants", {
   documentReceiver: varchar("document_receiver", { length: 255 }),
   documentReceivedDate: varchar("document_received_date", { length: 50 }),
   documentChecker: varchar("document_checker", { length: 255 }),
+  documentCheckedDate: varchar("document_checked_date", { length: 50 }),
   documentNotes: text("document_notes"),
   documentChecklist: jsonb("document_checklist"),
 

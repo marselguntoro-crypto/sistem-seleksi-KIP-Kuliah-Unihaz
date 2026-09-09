@@ -841,6 +841,7 @@ export default function App() {
                 studyPrograms={studyPrograms}
                 academicYears={academicYears}
                 onImportSuccess={handleImportSuccess}
+                onBatchUpdateParticipants={handleBatchUpdateParticipants}
                 onCancel={() => setActiveRoute('participants')}
               />
             ) : activeRoute === 'documents' ? (
@@ -849,6 +850,7 @@ export default function App() {
                 studyPrograms={studyPrograms}
                 currentUser={currentUser}
                 onUpdateParticipant={handleUpdateParticipant}
+                onBatchUpdateParticipants={handleBatchUpdateParticipants}
               />
             ) : activeRoute === 'survey' ? (
               <SurveyEvaluationView

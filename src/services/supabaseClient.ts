@@ -56,6 +56,7 @@ export interface SupabaseParticipantRow {
   document_receiver?: string | null;
   document_received_date?: string | null;
   document_checker?: string | null;
+  document_checked_date?: string | null;
   document_notes?: string | null;
   document_checklist?: Record<string, boolean> | null;
   survey_score?: number | null;
@@ -187,6 +188,7 @@ export function mapSupabaseParticipantToApp(row: SupabaseParticipantRow): Partic
     documentReceiver: row.document_receiver || undefined,
     documentReceivedDate: row.document_received_date || undefined,
     documentChecker: row.document_checker || undefined,
+    documentCheckedDate: row.document_checked_date || undefined,
     documentNotes: row.document_notes || undefined,
     documentChecklist: row.document_checklist || undefined,
     surveyScore: row.survey_score ?? undefined,
@@ -243,6 +245,7 @@ export function mapAppParticipantToSupabase(p: Partial<Participant>): Partial<Su
   if (p.documentReceiver !== undefined) row.document_receiver = p.documentReceiver;
   if (p.documentReceivedDate !== undefined) row.document_received_date = p.documentReceivedDate;
   if (p.documentChecker !== undefined) row.document_checker = p.documentChecker;
+  if (p.documentCheckedDate !== undefined) row.document_checked_date = p.documentCheckedDate;
   if (p.documentNotes !== undefined) row.document_notes = p.documentNotes;
   if (p.documentChecklist !== undefined) row.document_checklist = p.documentChecklist;
   if (p.surveyScore !== undefined) row.survey_score = p.surveyScore;

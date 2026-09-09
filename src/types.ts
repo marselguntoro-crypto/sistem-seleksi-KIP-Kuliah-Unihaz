@@ -86,6 +86,7 @@ export interface Participant {
   documentReceiver?: string;
   documentReceivedDate?: string;
   documentChecker?: string;
+  documentCheckedDate?: string;
   documentNotes?: string;
   documentChecklist?: Record<string, boolean>;
   surveyScore?: number;
@@ -286,6 +287,7 @@ export interface SupabaseParticipantRow {
   document_receiver?: string | null;
   document_received_date?: string | null;
   document_checker?: string | null;
+  document_checked_date?: string | null;
   document_notes?: string | null;
   document_checklist?: Record<string, boolean> | null;
   survey_score?: number | null;

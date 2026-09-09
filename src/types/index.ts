@@ -129,6 +129,7 @@ export interface Participant {
   documentReceiver?: string;
   documentReceivedDate?: string;
   documentChecker?: string;
+  documentCheckedDate?: string;
   documentNotes?: string;
   documentChecklist?: Record<string, boolean>;
 

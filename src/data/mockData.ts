@@ -1,4 +1,4 @@
-import { User, DashboardStats, ParticipantScoreItem, LaravelFile, AcademicYear, Faculty, StudyProgram, Participant } from '../types';
+import { User, DashboardStats, ParticipantScoreItem, LaravelFile, AcademicYear, Faculty, StudyProgram, Participant } from '../types.ts';
 
 export const SEEDED_USERS: User[] = [
   {

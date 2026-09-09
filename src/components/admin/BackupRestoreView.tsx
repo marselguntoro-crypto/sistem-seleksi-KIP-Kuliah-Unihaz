@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DatabaseBackupItem, Participant, StudyProgram, Faculty, AcademicYear, User, SelectionAuditLog, SelectionWeights } from '../../types';
+import { api } from '../../utils/api';
 import {
   Database,
   Download,
@@ -68,6 +69,13 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
   // Upload state
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadedJsonData, setUploadedJsonData] = useState<any>(null);
+
+  // Health and Database Engine state
+  const [dbHealth, setDbHealth] = useState<{ status: string; database: string; mongodb?: any; isConfigured: boolean } | null>(null);
+
+  useEffect(() => {
+    api.getHealth().then(setDbHealth).catch(() => {});
+  }, []);
 
   // Database statistics
   const totalRecords =
@@ -284,13 +292,28 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
           <div className="p-3 bg-slate-50 rounded-lg border border-slate-200/80">
             <div className="flex items-center gap-1 text-[11px] font-medium text-slate-500">
               <Server className="w-3.5 h-3.5 text-slate-400" />
-              <span>Status Engine</span>
+              <span>Status Database Engine</span>
             </div>
             <div className="flex items-baseline justify-between mt-1">
-              <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" /> Online & Sehat
+              <span className={`text-xs font-bold flex items-center gap-1 ${
+                dbHealth?.mongodb?.hasPlaceholderPassword 
+                  ? 'text-amber-700'
+                  : 'text-emerald-700'
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${
+                  dbHealth?.mongodb?.hasPlaceholderPassword 
+                    ? 'bg-amber-500' 
+                    : 'bg-emerald-500 animate-ping'
+                }`} /> 
+                {dbHealth?.mongodb?.connected 
+                  ? 'MongoDB Atlas Aktif' 
+                  : dbHealth?.mongodb?.hasPlaceholderPassword 
+                  ? 'Menunggu Password' 
+                  : 'Online & Sehat'}
               </span>
-              <span className="text-[10px] text-slate-400 font-mono">PostgreSQL 16</span>
+              <span className="text-[10px] text-slate-500 font-mono truncate ml-1 max-w-[120px]" title={dbHealth?.database || 'Database'}>
+                {dbHealth?.mongodb?.connected ? 'Cluster0 Atlas' : dbHealth?.mongodb?.hasPlaceholderPassword ? 'Atlas (Pending)' : 'PostgreSQL/Cloud'}
+              </span>
             </div>
           </div>
 

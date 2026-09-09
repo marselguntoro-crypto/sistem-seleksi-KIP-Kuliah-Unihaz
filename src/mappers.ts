@@ -56,6 +56,7 @@ export function toAppParticipant(row: SupabaseParticipantRow): Participant {
     documentReceiver: row.document_receiver ?? undefined,
     documentReceivedDate: row.document_received_date ?? undefined,
     documentChecker: row.document_checker ?? undefined,
+    documentCheckedDate: row.document_checked_date ?? undefined,
     documentNotes: row.document_notes ?? undefined,
     documentChecklist: row.document_checklist ?? undefined,
     surveyScore: row.survey_score != null ? Number(row.survey_score) : undefined,
@@ -112,6 +113,7 @@ export function toSupabaseParticipant(app: Partial<Participant>): Partial<Supaba
   if (app.documentReceiver !== undefined) row.document_receiver = app.documentReceiver;
   if (app.documentReceivedDate !== undefined) row.document_received_date = app.documentReceivedDate;
   if (app.documentChecker !== undefined) row.document_checker = app.documentChecker;
+  if (app.documentCheckedDate !== undefined) row.document_checked_date = app.documentCheckedDate;
   if (app.documentNotes !== undefined) row.document_notes = app.documentNotes;
   if (app.documentChecklist !== undefined) row.document_checklist = app.documentChecklist;
   if (app.surveyScore !== undefined) row.survey_score = app.surveyScore;
