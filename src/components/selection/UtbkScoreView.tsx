@@ -40,11 +40,64 @@ interface ParsedScoreRow {
   name: string;
   rawScore: any;
   parsedScore: number | null;
+  formatNote?: string;
   notes: string;
   matchedParticipant: Participant | null;
   status: 'VALID' | 'UNMATCHED' | 'INVALID_SCORE';
   errorMessage?: string;
 }
+
+// Helper function to flexibly parse scores supporting both '.' and ',' (e.g. 76.70 and 76,70)
+export const parseFlexibleUtbkScore = (raw: any): {
+  parsedScore: number | null;
+  isValid: boolean;
+  formatNote?: string;
+} => {
+  if (raw === null || raw === undefined || raw === '') {
+    return { parsedScore: null, isValid: false };
+  }
+
+  // Already a valid JS/Excel number
+  if (typeof raw === 'number') {
+    if (isNaN(raw)) return { parsedScore: null, isValid: false };
+    if (raw >= 0 && raw <= 100) {
+      return {
+        parsedScore: Math.round(raw * 100) / 100,
+        isValid: true
+      };
+    }
+    return { parsedScore: null, isValid: false };
+  }
+
+  const rawStr = String(raw).trim();
+  if (!rawStr) return { parsedScore: null, isValid: false };
+
+  const hasComma = rawStr.includes(',');
+
+  // Standardize: strip '%', replace ',' with '.', remove whitespace around separator
+  let cleaned = rawStr
+    .replace(/%/g, '')
+    .replace(/\s*,\s*/g, '.')
+    .replace(/\s+/g, '')
+    .trim();
+
+  // If score has fraction notation e.g. "76.70/100"
+  if (cleaned.includes('/')) {
+    cleaned = cleaned.split('/')[0].trim();
+  }
+
+  const num = parseFloat(cleaned);
+  if (!isNaN(num) && num >= 0 && num <= 100) {
+    const rounded = Math.round(num * 100) / 100;
+    return {
+      parsedScore: rounded,
+      isValid: true,
+      formatNote: hasComma ? `Format koma (${rawStr}) ➔ ${rounded.toFixed(2)}` : undefined
+    };
+  }
+
+  return { parsedScore: null, isValid: false };
+};
 
 export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
   participants,
@@ -126,20 +179,17 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
   const handleSaveScore = () => {
     if (!selectedParticipant) return;
 
-    const num = parseFloat(utbkScoreInput.replace(',', '.'));
-    if (isNaN(num)) {
-      setValidationError('Nilai UTBK harus berupa angka valid.');
-      return;
-    }
-
-    if (num < 0 || num > 100) {
-      setValidationError('Validasi gagal: Nilai UTBK wajib berada dalam rentang 0 – 100.');
+    const { parsedScore, isValid } = parseFlexibleUtbkScore(utbkScoreInput);
+    if (!isValid || parsedScore === null) {
+      setValidationError(
+        'Validasi gagal: Nilai UTBK wajib berupa angka antara 0.00 – 100.00 (format titik 76.70 maupun koma 76,70 didukung).'
+      );
       return;
     }
 
     const updated: Participant = {
       ...selectedParticipant,
-      utbkScore: Math.round(num * 100) / 100,
+      utbkScore: parsedScore,
       utbkOperator: operatorName,
       utbkDate,
       utbkNotes,
@@ -162,63 +212,88 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
     const results: ParsedScoreRow[] = rawRows.map((row, index) => {
       const rowNum = index + 2; // Assuming row 1 is header
 
+      // Robust field getter (supports exact key or case-insensitive matching)
+      const findValue = (candidates: string[]): any => {
+        for (const c of candidates) {
+          if (row[c] !== undefined && row[c] !== null && String(row[c]).trim() !== '') {
+            return row[c];
+          }
+        }
+        const rowKeys = Object.keys(row);
+        for (const c of candidates) {
+          const normC = c.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const matchKey = rowKeys.find(
+            (k) => k.toLowerCase().replace(/[^a-z0-9]/g, '') === normC
+          );
+          if (matchKey && row[matchKey] !== undefined && row[matchKey] !== null && String(row[matchKey]).trim() !== '') {
+            return row[matchKey];
+          }
+        }
+        return '';
+      };
+
       // Extract registration number
       const regNumber = String(
-        row['Nomor Pendaftaran'] ||
-        row['No Pendaftaran'] ||
-        row['No. Pendaftaran'] ||
-        row['No Registrasi'] ||
-        row['regNumber'] ||
-        row['Nomor Registrasi'] ||
-        ''
+        findValue([
+          'Nomor Pendaftaran',
+          'No Pendaftaran',
+          'No. Pendaftaran',
+          'No Registrasi',
+          'regNumber',
+          'Nomor Registrasi',
+          'No Peserta'
+        ])
       ).trim();
 
       // Extract NISN
       const rawNisn = String(
-        row['NISN'] ||
-        row['nisn'] ||
-        row['Nomor Induk Siswa Nasional'] ||
-        ''
+        findValue([
+          'NISN',
+          'nisn',
+          'Nomor Induk Siswa Nasional',
+          'No NISN'
+        ])
       ).trim().replace(/[^0-9]/g, '');
 
       // Extract Name (optional for display)
       const name = String(
-        row['Nama Lengkap'] ||
-        row['Nama'] ||
-        row['name'] ||
-        ''
+        findValue([
+          'Nama Lengkap',
+          'Nama',
+          'name',
+          'Nama Peserta'
+        ])
       ).trim();
 
-      // Extract Score
-      const rawScore =
-        row['Nilai UTBK'] ??
-        row['Skor UTBK'] ??
-        row['Nilai'] ??
-        row['utbkScore'] ??
-        row['Skor'] ??
-        '';
+      // Extract Score with broad alias support
+      const rawScore = findValue([
+        'Nilai UTBK',
+        'Nilai UTBK / TPA',
+        'Nilai UTBK/TPA',
+        'Skor UTBK',
+        'Skor UTBK / TPA',
+        'Nilai TPA',
+        'Skor TPA',
+        'Nilai',
+        'Skor',
+        'utbkScore',
+        'UTBK',
+        'TPA',
+        'Nilai CBT'
+      ]);
 
       // Extract Notes
       const notes = String(
-        row['Catatan'] ||
-        row['Keterangan'] ||
-        row['notes'] ||
-        row['Keterangan Nilai'] ||
-        ''
+        findValue([
+          'Catatan',
+          'Keterangan',
+          'notes',
+          'Keterangan Nilai'
+        ])
       ).trim();
 
-      // Parse Score
-      let parsedScore: number | null = null;
-      let isScoreValid = false;
-
-      if (rawScore !== '' && rawScore !== null && rawScore !== undefined) {
-        const cleanedScoreStr = String(rawScore).replace(',', '.').trim();
-        const num = parseFloat(cleanedScoreStr);
-        if (!isNaN(num) && num >= 0 && num <= 100) {
-          parsedScore = Math.round(num * 100) / 100;
-          isScoreValid = true;
-        }
-      }
+      // Parse Score flexibly supporting both '.' (76.70) and ',' (76,70)
+      const { parsedScore, isValid: isScoreValid, formatNote } = parseFlexibleUtbkScore(rawScore);
 
       // Match Participant
       let matched: Participant | null = null;
@@ -240,7 +315,7 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
         errorMessage = `Peserta dengan No. Reg '${regNumber || '-'}' atau NISN '${rawNisn || '-'}' tidak ditemukan di database.`;
       } else if (!isScoreValid) {
         status = 'INVALID_SCORE';
-        errorMessage = `Nilai '${rawScore}' tidak valid (wajib berupa angka antara 0.00 – 100.00).`;
+        errorMessage = `Nilai '${rawScore || '(kosong)'}' tidak valid (wajib berupa angka antara 0.00 – 100.00; format titik 76.70 maupun koma 76,70 didukung).`;
       }
 
       return {
@@ -250,6 +325,7 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
         name: name || (matched ? matched.name : '-'),
         rawScore,
         parsedScore,
+        formatNote,
         notes,
         matchedParticipant: matched,
         status,
@@ -268,15 +344,37 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
+        const buffer = evt.target?.result as ArrayBuffer;
+        const wb = XLSX.read(buffer, { type: 'array' });
         const wsName = wb.SheetNames[0];
         const ws = wb.Sheets[wsName];
-        const data = XLSX.utils.sheet_to_json(ws);
+        let data: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
 
         if (data.length === 0) {
           alert('File Excel atau CSV kosong atau tidak memiliki data.');
           return;
+        }
+
+        // Semicolon-separated CSV fallback (standard in Indonesian Excel exports)
+        const firstRowKeys = Object.keys(data[0] || {});
+        if (firstRowKeys.length === 1 && firstRowKeys[0].includes(';')) {
+          const rawText = new TextDecoder('utf-8').decode(buffer);
+          const lines = rawText.split(/\r?\n/).filter((l) => l.trim().length > 0);
+          if (lines.length > 1) {
+            const headers = lines[0].split(';').map((h) => h.replace(/^["']|["']$/g, '').trim());
+            const parsedData = [];
+            for (let i = 1; i < lines.length; i++) {
+              const values = lines[i].split(';').map((v) => v.replace(/^["']|["']$/g, '').trim());
+              const rowObj: Record<string, string> = {};
+              headers.forEach((h, idx) => {
+                rowObj[h] = values[idx] || '';
+              });
+              parsedData.push(rowObj);
+            }
+            if (parsedData.length > 0) {
+              data = parsedData;
+            }
+          }
         }
 
         processImportRows(data, file.name);
@@ -285,7 +383,7 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
         alert('Gagal membaca file. Pastikan format file adalah .xlsx, .xls, atau .csv yang valid.');
       }
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -296,16 +394,25 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
       return;
     }
 
+    // Sample scores highlighting flexibility: both comma (e.g. 76,70) and dot (e.g. 88.75) formats
+    const sampleScores = ['88.75', '76,70', '91.25', '83,50', '76.70'];
+    const sampleNotes = [
+      'Skor format titik SNBT (88.75)',
+      'Format koma fleksibel (76,70) ➔ terbaca 76.70',
+      'Skor format titik CBT (91.25)',
+      'Format koma TPA (83,50) ➔ terbaca 83.50',
+      'Skor format titik standar (76.70)'
+    ];
+
     // Pick first 5 participants and generate sample scores
     const sampleData: any[] = participants.slice(0, 5).map((p, idx) => {
-      const sampleScore = [88.75, 76.50, 91.25, 83.00, 68.50][idx % 5];
       return {
         'Nomor Pendaftaran': p.regNumber,
         'NISN': p.nisn,
         'Nama Lengkap': p.name,
         'Program Studi': p.firstChoiceProdiName,
-        'Nilai UTBK': sampleScore,
-        'Catatan': 'Hasil Ujian CBT Gelombang 1'
+        'Nilai UTBK': sampleScores[idx % sampleScores.length],
+        'Catatan': sampleNotes[idx % sampleNotes.length]
       };
     });
 
@@ -315,8 +422,8 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
       'NISN': '0099999999',
       'Nama Lengkap': 'Peserta Uji Error (Unmatched)',
       'Program Studi': 'S1 Hukum',
-      'Nilai UTBK': 85.00,
-      'Catatan': 'Uji Coba Unmatched'
+      'Nilai UTBK': '76,70',
+      'Catatan': 'Uji Coba Unmatched (Format Koma 76,70)'
     });
 
     // Add 1 invalid score row for testing validation
@@ -327,8 +434,8 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
         'NISN': p.nisn,
         'Nama Lengkap': p.name,
         'Program Studi': p.firstChoiceProdiName,
-        'Nilai UTBK': 150.00,
-        'Catatan': 'Uji Coba Skor Di Luar Rentang'
+        'Nilai UTBK': '150,00',
+        'Catatan': 'Uji Coba Skor Di Luar Rentang (Maks 100)'
       });
     }
 
@@ -343,16 +450,16 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
         'NISN': '0065412891',
         'Nama Lengkap': 'Ahmad Fauzi',
         'Program Studi': 'S1 Teknik Informatika',
-        'Nilai UTBK': 87.50,
-        'Catatan': 'Skor UTBK SNBT 2026'
+        'Nilai UTBK': 76.70,
+        'Catatan': 'Contoh format titik (76.70)'
       },
       {
         'Nomor Pendaftaran': 'KIPK-2026-0002',
         'NISN': '0065412892',
         'Nama Lengkap': 'Siti Nurhaliza',
         'Program Studi': 'S1 Manajemen',
-        'Nilai UTBK': 79.25,
-        'Catatan': 'Skor TPA Mandiri UNIHAZ'
+        'Nilai UTBK': '76,70',
+        'Catatan': 'Contoh format koma (76,70) - otomatis terbaca 76.70'
       }
     ];
 
@@ -712,7 +819,7 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
               </span>
               <h2 className="text-lg font-bold mt-1">Import Massal Nilai UTBK / TPA</h2>
               <p className="text-xs text-indigo-200 mt-0.5 max-w-2xl leading-relaxed">
-                Unggah file Excel (.xlsx, .xls) atau CSV. Sistem mencocokkan peserta via Nomor Pendaftaran atau NISN (8–10 digit) serta memvalidasi skor (rentang 0 s/d 100).
+                Unggah file Excel (.xlsx, .xls) atau CSV. Format nilai desimal fleksibel: sistem menerima format titik (<span className="font-mono text-amber-300 font-bold">76.70</span>) maupun format koma (<span className="font-mono text-amber-300 font-bold">76,70</span>), keduanya otomatis dinormalisasi menjadi <span className="font-mono text-white font-bold">76.70</span>.
               </p>
             </div>
 
@@ -737,6 +844,22 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
             </div>
           </div>
 
+          {/* Flexible Number Format Notice */}
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex items-start gap-3 shadow-2xs">
+            <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <div className="text-xs text-emerald-900 space-y-0.5">
+              <div className="font-bold flex items-center gap-1.5">
+                <span>Dukungan Format Nilai Fleksibel (Titik & Koma)</span>
+                <span className="bg-emerald-200/80 text-emerald-900 font-mono text-[10px] px-1.5 py-0.2 rounded font-semibold">
+                  76.70 & 76,70
+                </span>
+              </div>
+              <p className="text-emerald-800 leading-relaxed">
+                Anda bebas menggunakan pemisah desimal titik (<code className="font-mono font-bold bg-emerald-100 px-1 py-0.2 rounded">76.70</code>) ataupun pemisah desimal koma standar Indonesia (<code className="font-mono font-bold bg-emerald-100 px-1 py-0.2 rounded">76,70</code>). Apabila terdapat format koma seperti <code className="font-mono font-bold bg-emerald-100 px-1 py-0.2 rounded">76,70</code>, sistem secara otomatis mengonversinya menjadi nilai numerik <code className="font-mono font-bold bg-emerald-100 px-1 py-0.2 rounded">76.70</code>.
+              </p>
+            </div>
+          </div>
+
           {/* Upload Dropzone & Test Runner */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* File Dropzone */}
@@ -758,7 +881,7 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                   {fileName ? fileName : 'Pilih atau Tarik File Excel/CSV Nilai UTBK ke Sini'}
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Format yang didukung: .xlsx, .xls, .csv (Kolom utama: Nomor Pendaftaran / NISN, Nilai UTBK)
+                  Format yang didukung: .xlsx, .xls, .csv | Nilai fleksibel: <span className="font-semibold text-indigo-900">76.70</span> atau <span className="font-semibold text-indigo-900">76,70</span>
                 </p>
               </div>
 
@@ -899,7 +1022,7 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                         <th className="py-3 px-4">Peserta di Database</th>
                         <th className="py-3 px-4">Program Studi</th>
                         <th className="py-3 px-4 text-center">Nilai Lama</th>
-                        <th className="py-3 px-4 text-center">Nilai Baru (File)</th>
+                        <th className="py-3 px-4 text-center">Nilai Terbaca (Sistem)</th>
                         <th className="py-3 px-4 text-center">Status Validasi</th>
                         <th className="py-3 px-4">Keterangan / Pesan</th>
                       </tr>
@@ -969,9 +1092,16 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
 
                               <td className="py-3 px-4 text-center">
                                 {r.parsedScore !== null ? (
-                                  <span className="px-2.5 py-0.5 rounded font-bold text-xs bg-indigo-100 text-indigo-900 border border-indigo-300 font-mono">
-                                    {r.parsedScore.toFixed(2)}
-                                  </span>
+                                  <div className="inline-flex flex-col items-center">
+                                    <span className="px-2.5 py-0.5 rounded font-bold text-xs bg-indigo-100 text-indigo-900 border border-indigo-300 font-mono">
+                                      {r.parsedScore.toFixed(2)}
+                                    </span>
+                                    {r.formatNote && (
+                                      <span className="text-[9px] text-emerald-700 font-medium font-mono mt-0.5" title={r.formatNote}>
+                                        (dari {String(r.rawScore).trim()})
+                                      </span>
+                                    )}
+                                  </div>
                                 ) : (
                                   <span className="px-2 py-0.5 rounded font-bold text-xs bg-rose-100 text-rose-800 font-mono">
                                     {String(r.rawScore || '-')}
@@ -1056,27 +1186,30 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                 </div>
               )}
 
-              {/* Score Input with Strict Validation (0-100) */}
+              {/* Score Input with Flexible Validation (0-100) */}
               <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Nilai UTBK / Skor TPA (0.00 – 100.00) <span className="text-rose-600">*</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-800">
+                    Nilai UTBK / Skor TPA (0.00 – 100.00) <span className="text-rose-600">*</span>
+                  </label>
+                  <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 font-mono">
+                    Format fleksibel: 76.70 atau 76,70
+                  </span>
+                </div>
                 <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  placeholder="Contoh: 85.50"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Contoh: 76.70 atau 76,70"
                   value={utbkScoreInput}
                   onChange={(e) => {
                     setUtbkScoreInput(e.target.value);
                     setValidationError(null);
                   }}
-                  className="w-full px-3 py-2 text-base font-bold border border-slate-300 rounded text-indigo-900 bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-none"
+                  className="w-full px-3 py-2 text-base font-bold border border-slate-300 rounded text-indigo-900 bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-none font-mono"
                   autoFocus
                 />
                 <p className="text-[11px] text-slate-500 mt-1">
-                  Validasi ketat sistem: Nilai harus berupa numerik antara rentang 0 sampai 100.
+                  Sistem menerima format titik (<span className="font-mono font-semibold">76.70</span>) maupun koma (<span className="font-mono font-semibold">76,70</span>). Format 76,70 otomatis dianggap dan disimpan sebagai 76.70.
                 </p>
               </div>
 
