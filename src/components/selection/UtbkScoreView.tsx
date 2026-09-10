@@ -22,7 +22,9 @@ import {
   RefreshCw,
   ArrowRight,
   CheckCircle,
-  XCircle
+  XCircle,
+  MinusCircle,
+  Info
 } from 'lucide-react';
 
 interface UtbkScoreViewProps {
@@ -33,44 +35,65 @@ interface UtbkScoreViewProps {
   onBatchUpdateParticipants?: (participants: Participant[], message?: string) => void;
 }
 
-interface ParsedScoreRow {
+export interface ParsedScoreRow {
   rowNum: number;
   regNumber: string;
   nisn: string;
   name: string;
   rawScore: any;
   parsedScore: number | null;
+  isEmptyScore: boolean;
   formatNote?: string;
   notes: string;
   matchedParticipant: Participant | null;
-  status: 'VALID' | 'UNMATCHED' | 'INVALID_SCORE';
+  status: 'VALID' | 'EMPTY_SCORE' | 'UNMATCHED' | 'INVALID_SCORE';
   errorMessage?: string;
 }
 
-// Helper function to flexibly parse scores supporting both '.' and ',' (e.g. 76.70 and 76,70)
-export const parseFlexibleUtbkScore = (raw: any): {
+export interface ParseScoreResult {
   parsedScore: number | null;
   isValid: boolean;
+  isEmpty: boolean;
   formatNote?: string;
-} => {
-  if (raw === null || raw === undefined || raw === '') {
-    return { parsedScore: null, isValid: false };
+  rawText: string;
+}
+
+// Helper function to flexibly parse scores supporting both '.' and ',' (e.g. 76.70 and 76,70),
+// and treating empty cells or '-' as empty/no score without error.
+export const parseFlexibleUtbkScore = (raw: any): ParseScoreResult => {
+  if (raw === null || raw === undefined) {
+    return { parsedScore: null, isValid: true, isEmpty: true, rawText: '' };
+  }
+
+  const rawStr = String(raw).trim();
+  const lower = rawStr.toLowerCase();
+
+  // If score is empty, '-', '--', or similar placeholder text, consider as no score / empty
+  const emptyEquivalents = ['', '-', '--', '—', '–', 'n/a', 'na', 'null', 'kosong', 'belum ada', 'tidak ada', 'belum'];
+  if (emptyEquivalents.includes(lower)) {
+    return {
+      parsedScore: null,
+      isValid: true,
+      isEmpty: true,
+      rawText: rawStr || '(kosong)'
+    };
   }
 
   // Already a valid JS/Excel number
   if (typeof raw === 'number') {
-    if (isNaN(raw)) return { parsedScore: null, isValid: false };
+    if (isNaN(raw)) {
+      return { parsedScore: null, isValid: false, isEmpty: false, rawText: String(raw) };
+    }
     if (raw >= 0 && raw <= 100) {
       return {
         parsedScore: Math.round(raw * 100) / 100,
-        isValid: true
+        isValid: true,
+        isEmpty: false,
+        rawText: String(raw)
       };
     }
-    return { parsedScore: null, isValid: false };
+    return { parsedScore: null, isValid: false, isEmpty: false, rawText: String(raw) };
   }
-
-  const rawStr = String(raw).trim();
-  if (!rawStr) return { parsedScore: null, isValid: false };
 
   const hasComma = rawStr.includes(',');
 
@@ -92,11 +115,13 @@ export const parseFlexibleUtbkScore = (raw: any): {
     return {
       parsedScore: rounded,
       isValid: true,
-      formatNote: hasComma ? `Format koma (${rawStr}) ➔ ${rounded.toFixed(2)}` : undefined
+      isEmpty: false,
+      formatNote: hasComma ? `Format koma (${rawStr}) ➔ ${rounded.toFixed(2)}` : undefined,
+      rawText: rawStr
     };
   }
 
-  return { parsedScore: null, isValid: false };
+  return { parsedScore: null, isValid: false, isEmpty: false, rawText: rawStr };
 };
 
 export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
@@ -126,7 +151,8 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [parsedRows, setParsedRows] = useState<ParsedScoreRow[]>([]);
-  const [previewFilter, setPreviewFilter] = useState<'ALL' | 'VALID' | 'ISSUES'>('ALL');
+  const [previewFilter, setPreviewFilter] = useState<'ALL' | 'VALID' | 'EMPTY' | 'ISSUES'>('ALL');
+  const [includeEmptyScores, setIncludeEmptyScores] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
 
@@ -179,10 +205,26 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
   const handleSaveScore = () => {
     if (!selectedParticipant) return;
 
-    const { parsedScore, isValid } = parseFlexibleUtbkScore(utbkScoreInput);
+    const { parsedScore, isValid, isEmpty } = parseFlexibleUtbkScore(utbkScoreInput);
+
+    // If input is empty or '-', treat as clearing or emptying the score
+    if (isEmpty) {
+      const updated: Participant = {
+        ...selectedParticipant,
+        utbkScore: 0,
+        utbkOperator: operatorName,
+        utbkDate,
+        utbkNotes: utbkNotes || 'Nilai dikosongkan (tanpa nilai UTBK/TPA).',
+        updatedAt: new Date().toISOString()
+      };
+      onUpdateParticipant(updated);
+      setSelectedParticipant(null);
+      return;
+    }
+
     if (!isValid || parsedScore === null) {
       setValidationError(
-        'Validasi gagal: Nilai UTBK wajib berupa angka antara 0.00 – 100.00 (format titik 76.70 maupun koma 76,70 didukung).'
+        'Validasi gagal: Nilai UTBK wajib berupa angka antara 0.00 – 100.00 (format titik 76.70 maupun koma 76,70 didukung, atau kosong / "-" jika tanpa nilai).'
       );
       return;
     }
@@ -292,8 +334,8 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
         ])
       ).trim();
 
-      // Parse Score flexibly supporting both '.' (76.70) and ',' (76,70)
-      const { parsedScore, isValid: isScoreValid, formatNote } = parseFlexibleUtbkScore(rawScore);
+      // Parse Score flexibly supporting both '.' (76.70) and ',' (76,70), plus empty / '-'
+      const { parsedScore, isValid: isScoreValid, isEmpty, formatNote, rawText } = parseFlexibleUtbkScore(rawScore);
 
       // Match Participant
       let matched: Participant | null = null;
@@ -307,15 +349,18 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
       }
 
       // Determine Status
-      let status: 'VALID' | 'UNMATCHED' | 'INVALID_SCORE' = 'VALID';
+      let status: 'VALID' | 'EMPTY_SCORE' | 'UNMATCHED' | 'INVALID_SCORE' = 'VALID';
       let errorMessage: string | undefined = undefined;
 
       if (!matched) {
         status = 'UNMATCHED';
         errorMessage = `Peserta dengan No. Reg '${regNumber || '-'}' atau NISN '${rawNisn || '-'}' tidak ditemukan di database.`;
+      } else if (isEmpty) {
+        // Jika nilai kosong atau '-', maka dianggap tidak ada nilai atau kosong (bukan error)
+        status = 'EMPTY_SCORE';
       } else if (!isScoreValid) {
         status = 'INVALID_SCORE';
-        errorMessage = `Nilai '${rawScore || '(kosong)'}' tidak valid (wajib berupa angka antara 0.00 – 100.00; format titik 76.70 maupun koma 76,70 didukung).`;
+        errorMessage = `Nilai '${rawText}' tidak valid (wajib berupa angka antara 0.00 – 100.00; format titik 76.70 maupun koma 76,70 didukung).`;
       }
 
       return {
@@ -325,6 +370,7 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
         name: name || (matched ? matched.name : '-'),
         rawScore,
         parsedScore,
+        isEmptyScore: isEmpty,
         formatNote,
         notes,
         matchedParticipant: matched,
@@ -394,13 +440,13 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
       return;
     }
 
-    // Sample scores highlighting flexibility: both comma (e.g. 76,70) and dot (e.g. 88.75) formats
-    const sampleScores = ['88.75', '76,70', '91.25', '83,50', '76.70'];
+    // Sample scores highlighting flexibility: comma (76,70), dot (88.75), empty score "", and hyphen "-"
+    const sampleScores = ['88.75', '76,70', '', '-', '76.70'];
     const sampleNotes = [
       'Skor format titik SNBT (88.75)',
       'Format koma fleksibel (76,70) ➔ terbaca 76.70',
-      'Skor format titik CBT (91.25)',
-      'Format koma TPA (83,50) ➔ terbaca 83.50',
+      'Nilai kosong (dianggap tanpa nilai)',
+      "Nilai tanda strip '-' (dianggap tanpa nilai)",
       'Skor format titik standar (76.70)'
     ];
 
@@ -460,6 +506,14 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
         'Program Studi': 'S1 Manajemen',
         'Nilai UTBK': '76,70',
         'Catatan': 'Contoh format koma (76,70) - otomatis terbaca 76.70'
+      },
+      {
+        'Nomor Pendaftaran': 'KIPK-2026-0003',
+        'NISN': '0065412893',
+        'Nama Lengkap': 'Budi Santoso',
+        'Program Studi': 'S1 Ilmu Komunikasi',
+        'Nilai UTBK': '-',
+        'Catatan': "Contoh tanda '-' atau kosong untuk peserta yang belum memiliki nilai"
       }
     ];
 
@@ -494,9 +548,17 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
 
   // Apply Batch Import
   const handleApplyBatchImport = () => {
-    const validRows = parsedRows.filter((r) => r.status === 'VALID' && r.matchedParticipant && r.parsedScore !== null);
-    if (validRows.length === 0) {
-      alert('Tidak ada baris valid yang siap disimpan.');
+    // Rows eligible to save:
+    // 1. Valid with score (status === 'VALID' && parsedScore !== null)
+    // 2. If includeEmptyScores is checked, also update rows with status === 'EMPTY_SCORE' (setting utbkScore to 0)
+    const rowsToApply = parsedRows.filter(
+      (r) =>
+        r.matchedParticipant &&
+        (r.status === 'VALID' || (includeEmptyScores && r.status === 'EMPTY_SCORE'))
+    );
+
+    if (rowsToApply.length === 0) {
+      alert('Tidak ada baris dengan nilai valid yang dapat disimpan.');
       return;
     }
 
@@ -504,14 +566,15 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
     const today = new Date().toISOString().split('T')[0];
 
     // Build updated participants list
-    const updatedParticipantsList: Participant[] = validRows.map((r) => {
+    const updatedParticipantsList: Participant[] = rowsToApply.map((r) => {
       const p = r.matchedParticipant!;
+      const isScoreEmpty = r.status === 'EMPTY_SCORE' || r.parsedScore === null;
       return {
         ...p,
-        utbkScore: r.parsedScore!,
+        utbkScore: isScoreEmpty ? 0 : r.parsedScore!,
         utbkOperator: currentUser.name,
         utbkDate: today,
-        utbkNotes: r.notes || `Import Excel (${fileName || 'File'})`,
+        utbkNotes: r.notes || (isScoreEmpty ? 'Tanpa nilai UTBK (Kosong)' : `Import Excel (${fileName || 'File'})`),
         updatedAt: new Date().toISOString()
       };
     });
@@ -519,14 +582,20 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
     if (onBatchUpdateParticipants) {
       onBatchUpdateParticipants(
         updatedParticipantsList,
-        `Sebanyak ${updatedParticipantsList.length} nilai UTBK peserta berhasil diperbarui ke sistem.`
+        `Sebanyak ${updatedParticipantsList.length} data nilai UTBK peserta berhasil diperbarui ke sistem.`
       );
     } else {
       updatedParticipantsList.forEach((p) => onUpdateParticipant(p));
     }
 
     setIsProcessing(false);
-    setImportSuccessMessage(`Berhasil memperbarui ${validRows.length} nilai UTBK calon mahasiswa.`);
+    const validCount = rowsToApply.filter((r) => r.status === 'VALID').length;
+    const emptyCount = rowsToApply.filter((r) => r.status === 'EMPTY_SCORE').length;
+    setImportSuccessMessage(
+      `Berhasil memperbarui ${rowsToApply.length} data peserta (${validCount} nilai tersimpan${
+        emptyCount > 0 ? `, ${emptyCount} baris kosong dikosongkan` : ''
+      }).`
+    );
     setParsedRows([]);
     setFileName(null);
   };
@@ -534,16 +603,26 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
   // Import Mode Metrics
   const importMetrics = useMemo(() => {
     const total = parsedRows.length;
-    const valid = parsedRows.filter((r) => r.status === 'VALID').length;
+    const validWithScore = parsedRows.filter((r) => r.status === 'VALID').length;
+    const emptyScore = parsedRows.filter((r) => r.status === 'EMPTY_SCORE').length;
     const unmatched = parsedRows.filter((r) => r.status === 'UNMATCHED').length;
     const invalidScore = parsedRows.filter((r) => r.status === 'INVALID_SCORE').length;
-    return { total, valid, unmatched, invalidScore, issues: unmatched + invalidScore };
+    const issues = unmatched + invalidScore;
+    return {
+      total,
+      validWithScore,
+      emptyScore,
+      unmatched,
+      invalidScore,
+      issues
+    };
   }, [parsedRows]);
 
   // Filtered Parsed Rows for Preview
   const filteredParsedRows = useMemo(() => {
     if (previewFilter === 'VALID') return parsedRows.filter((r) => r.status === 'VALID');
-    if (previewFilter === 'ISSUES') return parsedRows.filter((r) => r.status !== 'VALID');
+    if (previewFilter === 'EMPTY') return parsedRows.filter((r) => r.status === 'EMPTY_SCORE');
+    if (previewFilter === 'ISSUES') return parsedRows.filter((r) => r.status === 'UNMATCHED' || r.status === 'INVALID_SCORE');
     return parsedRows;
   }, [parsedRows, previewFilter]);
 
@@ -848,14 +927,17 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex items-start gap-3 shadow-2xs">
             <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
             <div className="text-xs text-emerald-900 space-y-0.5">
-              <div className="font-bold flex items-center gap-1.5">
-                <span>Dukungan Format Nilai Fleksibel (Titik & Koma)</span>
+              <div className="font-bold flex items-center gap-1.5 flex-wrap">
+                <span>Dukungan Format Nilai Fleksibel (Titik & Koma) serta Penanganan Nilai Kosong</span>
                 <span className="bg-emerald-200/80 text-emerald-900 font-mono text-[10px] px-1.5 py-0.2 rounded font-semibold">
                   76.70 & 76,70
                 </span>
+                <span className="bg-slate-200 text-slate-800 font-mono text-[10px] px-1.5 py-0.2 rounded font-semibold">
+                  Kosong / '-' = Tanpa Nilai
+                </span>
               </div>
               <p className="text-emerald-800 leading-relaxed">
-                Anda bebas menggunakan pemisah desimal titik (<code className="font-mono font-bold bg-emerald-100 px-1 py-0.2 rounded">76.70</code>) ataupun pemisah desimal koma standar Indonesia (<code className="font-mono font-bold bg-emerald-100 px-1 py-0.2 rounded">76,70</code>). Apabila terdapat format koma seperti <code className="font-mono font-bold bg-emerald-100 px-1 py-0.2 rounded">76,70</code>, sistem secara otomatis mengonversinya menjadi nilai numerik <code className="font-mono font-bold bg-emerald-100 px-1 py-0.2 rounded">76.70</code>.
+                Sistem mendukung pemisah desimal titik (<code className="font-mono font-bold bg-emerald-100 px-1 py-0.2 rounded">76.70</code>) maupun koma standar (<code className="font-mono font-bold bg-emerald-100 px-1 py-0.2 rounded">76,70</code>) dengan normalisasi otomatis menjadi <code className="font-mono font-bold bg-emerald-100 px-1 py-0.2 rounded">76.70</code>. Apabila nilai pada kolom berupa kosong atau tanda strip (<code className="font-mono font-bold bg-emerald-100 px-1 py-0.2 rounded">-</code>), sistem menganggapnya sebagai <strong>tidak ada nilai / kosong</strong> (bukan error / cacat validasi).
               </p>
             </div>
           </div>
@@ -881,7 +963,7 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                   {fileName ? fileName : 'Pilih atau Tarik File Excel/CSV Nilai UTBK ke Sini'}
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Format yang didukung: .xlsx, .xls, .csv | Nilai fleksibel: <span className="font-semibold text-indigo-900">76.70</span> atau <span className="font-semibold text-indigo-900">76,70</span>
+                  Format yang didukung: .xlsx, .xls, .csv | Nilai fleksibel: <span className="font-semibold text-indigo-900">76.70</span> / <span className="font-semibold text-indigo-900">76,70</span> | Kosong / '-' = valid tanpa nilai
                 </p>
               </div>
 
@@ -904,7 +986,7 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                   <span>Uji Coba Cepat (Test Demo)</span>
                 </div>
                 <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                  Belum memiliki file Excel? Klik tombol di bawah untuk memuat data simulasi nilai yang langsung dipasangkan dengan peserta yang terdaftar di database.
+                  Belum memiliki file Excel? Klik tombol di bawah untuk memuat data simulasi nilai fleksibel (koma, titik, kosong, & '-') yang langsung dipasangkan ke database.
                 </p>
               </div>
 
@@ -922,7 +1004,7 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
           {parsedRows.length > 0 && (
             <div className="space-y-4">
               {/* Metrics Bar */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Baris File</span>
                   <div className="text-lg font-bold text-slate-900">{importMetrics.total} Baris</div>
@@ -930,9 +1012,15 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                 </div>
 
                 <div className="bg-white p-3.5 rounded-xl border border-emerald-200 shadow-xs bg-emerald-50/30">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Valid (Siap Disimpan)</span>
-                  <div className="text-lg font-bold text-emerald-700">{importMetrics.valid} Peserta</div>
-                  <div className="text-[10px] text-emerald-600">Peserta cocok & skor valid</div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Dengan Nilai</span>
+                  <div className="text-lg font-bold text-emerald-700">{importMetrics.validWithScore} Peserta</div>
+                  <div className="text-[10px] text-emerald-600">Skor valid (0.00 – 100.00)</div>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs bg-slate-50/70">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Tanpa Nilai / Kosong</span>
+                  <div className="text-lg font-bold text-slate-800">{importMetrics.emptyScore} Baris</div>
+                  <div className="text-[10px] text-slate-500">Kosong atau tanda '-'</div>
                 </div>
 
                 <div className="bg-white p-3.5 rounded-xl border border-amber-200 shadow-xs bg-amber-50/30">
@@ -944,13 +1032,13 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                 <div className="bg-white p-3.5 rounded-xl border border-rose-200 shadow-xs bg-rose-50/30">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700">Format Nilai Cacat</span>
                   <div className="text-lg font-bold text-rose-700">{importMetrics.invalidScore} Baris</div>
-                  <div className="text-[10px] text-rose-600">Bukan angka atau di luar 0–100</div>
+                  <div className="text-[10px] text-rose-600">Bukan angka / di luar 0–100</div>
                 </div>
               </div>
 
               {/* Filter Tabs & Batch Apply Action */}
               <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <button
                     onClick={() => setPreviewFilter('ALL')}
                     className={`px-3 py-1.5 rounded-md text-xs font-bold transition cursor-pointer ${
@@ -970,7 +1058,18 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                         : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
                     }`}
                   >
-                    Hanya Siap Update ({importMetrics.valid})
+                    Dengan Nilai ({importMetrics.validWithScore})
+                  </button>
+
+                  <button
+                    onClick={() => setPreviewFilter('EMPTY')}
+                    className={`px-3 py-1.5 rounded-md text-xs font-bold transition cursor-pointer ${
+                      previewFilter === 'EMPTY'
+                        ? 'bg-slate-700 text-white'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                    }`}
+                  >
+                    Tanpa Nilai / Kosong ({importMetrics.emptyScore})
                   </button>
 
                   <button
@@ -981,31 +1080,47 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                         : 'bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200'
                     }`}
                   >
-                    Hanya Bermasalah ({importMetrics.issues})
+                    Bermasalah ({importMetrics.issues})
                   </button>
                 </div>
 
-                <div className="flex items-center gap-2 w-full md:w-auto">
+                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                  {importMetrics.emptyScore > 0 && (
+                    <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer select-none bg-slate-50 hover:bg-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={includeEmptyScores}
+                        onChange={(e) => setIncludeEmptyScores(e.target.checked)}
+                        className="rounded text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                      />
+                      <span className="text-[11px] font-medium">Sertakan {importMetrics.emptyScore} data kosong (set 0.00)</span>
+                    </label>
+                  )}
+
                   <button
                     onClick={() => {
                       setParsedRows([]);
                       setFileName(null);
                     }}
-                    className="px-3.5 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 font-semibold text-xs cursor-pointer"
+                    className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 font-semibold text-xs cursor-pointer"
                   >
                     Batal / Reset
                   </button>
 
                   <button
                     onClick={handleApplyBatchImport}
-                    disabled={importMetrics.valid === 0 || isProcessing}
+                    disabled={(importMetrics.validWithScore === 0 && (!includeEmptyScores || importMetrics.emptyScore === 0)) || isProcessing}
                     className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Save className="w-4 h-4" />
                     <span>
                       {isProcessing
                         ? 'Menyimpan...'
-                        : `Terapkan & Simpan ${importMetrics.valid} Nilai ke Database`}
+                        : `Terapkan & Simpan ${
+                            includeEmptyScores
+                              ? importMetrics.validWithScore + importMetrics.emptyScore
+                              : importMetrics.validWithScore
+                          } Data ke Database`}
                     </span>
                   </button>
                 </div>
@@ -1047,6 +1162,8 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                                   ? 'bg-amber-50/20'
                                   : r.status === 'INVALID_SCORE'
                                   ? 'bg-rose-50/20'
+                                  : r.status === 'EMPTY_SCORE'
+                                  ? 'bg-slate-50/40'
                                   : ''
                               }`}
                             >
@@ -1091,7 +1208,12 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                               </td>
 
                               <td className="py-3 px-4 text-center">
-                                {r.parsedScore !== null ? (
+                                {r.status === 'EMPTY_SCORE' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-600 border border-slate-200 font-medium">
+                                    <MinusCircle className="w-3 h-3 text-slate-400" />
+                                    <span>Tanpa Nilai / Kosong</span>
+                                  </span>
+                                ) : r.parsedScore !== null ? (
                                   <div className="inline-flex flex-col items-center">
                                     <span className="px-2.5 py-0.5 rounded font-bold text-xs bg-indigo-100 text-indigo-900 border border-indigo-300 font-mono">
                                       {r.parsedScore.toFixed(2)}
@@ -1104,7 +1226,7 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                                   </div>
                                 ) : (
                                   <span className="px-2 py-0.5 rounded font-bold text-xs bg-rose-100 text-rose-800 font-mono">
-                                    {String(r.rawScore || '-')}
+                                    {String(r.rawScore || '(kosong)')}
                                   </span>
                                 )}
                               </td>
@@ -1114,6 +1236,11 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                                     <CheckCircle className="w-3 h-3 text-emerald-600" />
                                     <span>Siap Disimpan</span>
+                                  </span>
+                                ) : r.status === 'EMPTY_SCORE' ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
+                                    <MinusCircle className="w-3 h-3 text-slate-500" />
+                                    <span>Tanpa Nilai</span>
                                   </span>
                                 ) : r.status === 'UNMATCHED' ? (
                                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
@@ -1132,6 +1259,11 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                                 {r.errorMessage ? (
                                   <span className="text-rose-600 font-medium">
                                     {r.errorMessage}
+                                  </span>
+                                ) : r.status === 'EMPTY_SCORE' ? (
+                                  <span className="text-slate-500 italic flex items-center gap-1">
+                                    <Info className="w-3 h-3 text-slate-400 shrink-0" />
+                                    <span>Nilai kosong atau '-' (dianggap belum ada nilai, dilewati / diset 0.00)</span>
                                   </span>
                                 ) : (
                                   <span className="text-slate-500">
@@ -1190,16 +1322,16 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-xs font-bold text-slate-800">
-                    Nilai UTBK / Skor TPA (0.00 – 100.00) <span className="text-rose-600">*</span>
+                    Nilai UTBK / Skor TPA (0.00 – 100.00)
                   </label>
                   <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 font-mono">
-                    Format fleksibel: 76.70 atau 76,70
+                    Format fleksibel: 76.70 / 76,70 / Kosong / '-'
                   </span>
                 </div>
                 <input
                   type="text"
                   inputMode="decimal"
-                  placeholder="Contoh: 76.70 atau 76,70"
+                  placeholder="Contoh: 76.70 atau 76,70 (atau kosongkan / '-')"
                   value={utbkScoreInput}
                   onChange={(e) => {
                     setUtbkScoreInput(e.target.value);
@@ -1209,7 +1341,7 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                   autoFocus
                 />
                 <p className="text-[11px] text-slate-500 mt-1">
-                  Sistem menerima format titik (<span className="font-mono font-semibold">76.70</span>) maupun koma (<span className="font-mono font-semibold">76,70</span>). Format 76,70 otomatis dianggap dan disimpan sebagai 76.70.
+                  Sistem menerima format titik (<span className="font-mono font-semibold">76.70</span>) maupun koma (<span className="font-mono font-semibold">76,70</span>). Jika dikosongkan atau diisi <span className="font-mono font-semibold">'-'</span>, sistem menganggapnya tanpa nilai (dikosongkan).
                 </p>
               </div>
 
