@@ -731,20 +731,6 @@ export default function App() {
         }}
         onOpenCodeExplorer={() => setIsCodeModalOpen(true)}
         onOpenTestRunner={() => setActiveTab('tests')}
-        onSwitchRole={(newUser) => {
-          try {
-            localStorage.setItem('unihaz_kipk_session_user', JSON.stringify(newUser));
-          } catch (e) {
-            console.error('Failed to update session:', e);
-          }
-          setCurrentUser(newUser);
-          showToast(
-            'success',
-            'Role Berubah',
-            `Sesi disimulasikan sebagai ${newUser.name} (${newUser.role}). Hak akses sidebar diperbarui otomatis.`
-          );
-        }}
-        availableUsers={users}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -879,6 +865,7 @@ export default function App() {
                 participants={participants}
                 studyPrograms={studyPrograms}
                 academicYears={academicYears}
+                faculties={faculties}
                 currentUser={currentUser}
                 onUpdateParticipant={handleUpdateParticipant}
                 onBatchUpdateParticipants={handleBatchUpdateParticipants}

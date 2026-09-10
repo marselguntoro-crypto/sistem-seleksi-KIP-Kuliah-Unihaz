@@ -262,11 +262,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {/* TAHAP SELEKSI */}
           <div className="mb-3">
-            <div className="px-4 py-1 text-blue-300 uppercase text-[10px] font-bold tracking-wider">
-              SELEKSI & HASIL
+            <div className="px-4 py-1 text-blue-300 uppercase text-[10px] font-bold tracking-wider flex items-center justify-between">
+              <span>ALUR SELEKSI</span>
+              <span className="text-[9px] text-yellow-400 font-semibold">5 TAHAP</span>
             </div>
             <div className="space-y-0.5">
-              {/* Pemberkasan */}
+              {/* 1. Pemberkasan */}
               <button
                 id="sidebar-link-documents"
                 onClick={() => handleLinkClick('documents', 'manage-document-verification', 'Pemberkasan Berkas')}
@@ -280,31 +281,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <div className="flex items-center">
                   <ClipboardCheck className="w-4 h-4 mr-3 text-teal-300 shrink-0" />
-                  <span>Pemberkasan</span>
+                  <span>1. Pemberkasan</span>
                 </div>
                 {!hasPermission('manage-document-verification') && <Lock className="w-3 h-3 text-blue-400/50 shrink-0" />}
               </button>
 
-              {/* Survey */}
-              <button
-                id="sidebar-link-survey"
-                onClick={() => handleLinkClick('survey', 'manage-survey-scores', 'Survey Lapangan')}
-                className={`w-full flex items-center justify-between px-4 py-2 transition-colors ${
-                  hasPermission('manage-survey-scores')
-                    ? activeRoute === 'survey'
-                      ? 'bg-blue-900 border-l-4 border-yellow-400 text-white font-semibold cursor-pointer'
-                      : 'text-blue-100 hover:bg-blue-800 hover:text-white cursor-pointer'
-                    : 'text-blue-400/40 hover:bg-blue-950/20 cursor-not-allowed'
-                }`}
-              >
-                <div className="flex items-center">
-                  <MapPin className="w-4 h-4 mr-3 text-cyan-300 shrink-0" />
-                  <span>Survey Lapangan</span>
-                </div>
-                {!hasPermission('manage-survey-scores') && <Lock className="w-3 h-3 text-blue-400/50 shrink-0" />}
-              </button>
-
-              {/* UTBK */}
+              {/* 2. Nilai UTBK (Seleksi Tahap Pertama) */}
               <button
                 id="sidebar-link-utbk"
                 onClick={() => handleLinkClick('utbk', 'manage-utbk-scores', 'Nilai UTBK')}
@@ -318,12 +300,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <div className="flex items-center">
                   <FileText className="w-4 h-4 mr-3 text-indigo-300 shrink-0" />
-                  <span>Nilai UTBK</span>
+                  <div className="flex items-center gap-1.5">
+                    <span>2. Nilai UTBK</span>
+                    <span className="text-[9px] font-semibold px-1 rounded bg-indigo-950/60 text-indigo-200 border border-indigo-500/30">
+                      Tahap 1
+                    </span>
+                  </div>
                 </div>
                 {!hasPermission('manage-utbk-scores') && <Lock className="w-3 h-3 text-blue-400/50 shrink-0" />}
               </button>
 
-              {/* Wawancara */}
+              {/* 3. Wawancara (Seleksi Tahap Pertama) */}
               <button
                 id="sidebar-link-interview"
                 onClick={() => handleLinkClick('interview', 'manage-interview-scores', 'Nilai Wawancara')}
@@ -337,18 +324,47 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <div className="flex items-center">
                   <MessageSquare className="w-4 h-4 mr-3 text-yellow-300 shrink-0" />
-                  <span>Wawancara</span>
+                  <div className="flex items-center gap-1.5">
+                    <span>3. Wawancara</span>
+                    <span className="text-[9px] font-semibold px-1 rounded bg-yellow-950/60 text-yellow-200 border border-yellow-500/30">
+                      Tahap 1
+                    </span>
+                  </div>
                 </div>
                 {!hasPermission('manage-interview-scores') && <Lock className="w-3 h-3 text-blue-400/50 shrink-0" />}
               </button>
 
-              {/* Ranking */}
+              {/* 4. Survey Lapangan (Dinamis / Tahap Akhir) */}
+              <button
+                id="sidebar-link-survey"
+                onClick={() => handleLinkClick('survey', 'manage-survey-scores', 'Survey Lapangan')}
+                className={`w-full flex items-center justify-between px-4 py-2 transition-colors ${
+                  hasPermission('manage-survey-scores')
+                    ? activeRoute === 'survey'
+                      ? 'bg-blue-900 border-l-4 border-yellow-400 text-white font-semibold cursor-pointer'
+                      : 'text-blue-100 hover:bg-blue-800 hover:text-white cursor-pointer'
+                    : 'text-blue-400/40 hover:bg-blue-950/20 cursor-not-allowed'
+                }`}
+              >
+                <div className="flex items-center">
+                  <MapPin className="w-4 h-4 mr-3 text-cyan-300 shrink-0" />
+                  <div className="flex items-center gap-1.5">
+                    <span>4. Survey Lapangan</span>
+                    <span className="text-[9px] font-bold px-1 rounded bg-cyan-900/60 text-cyan-200 border border-cyan-400/40">
+                      Dinamis
+                    </span>
+                  </div>
+                </div>
+                {!hasPermission('manage-survey-scores') && <Lock className="w-3 h-3 text-blue-400/50 shrink-0" />}
+              </button>
+
+              {/* 5. Ranking Seleksi (Keluaran Hasil Final) */}
               <button
                 id="sidebar-link-ranking"
-                onClick={() => handleLinkClick('ranking', 'view-rankings', 'Ranking Peserta')}
+                onClick={() => handleLinkClick('ranking', 'view-rankings', 'Ranking Seleksi (Hasil Final)')}
                 className={`w-full flex items-center justify-between px-4 py-2 transition-colors ${
-                  hasPermission('view-rankings')
-                    ? activeRoute === 'ranking'
+                  hasPermission('view-rankings') || hasPermission('determine-selection-results')
+                    ? activeRoute === 'ranking' || activeRoute === 'results'
                       ? 'bg-blue-900 border-l-4 border-yellow-400 text-white font-semibold cursor-pointer'
                       : 'text-blue-100 hover:bg-blue-800 hover:text-white cursor-pointer'
                     : 'text-blue-400/40 hover:bg-blue-950/20 cursor-not-allowed'
@@ -356,28 +372,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <div className="flex items-center">
                   <Trophy className="w-4 h-4 mr-3 text-yellow-300 shrink-0" />
-                  <span>Ranking Seleksi</span>
+                  <div className="flex flex-col text-left">
+                    <span>5. Ranking Seleksi</span>
+                    <span className="text-[9px] text-yellow-300 font-normal">Keluaran Hasil Final</span>
+                  </div>
                 </div>
-                {!hasPermission('view-rankings') && <Lock className="w-3 h-3 text-blue-400/50 shrink-0" />}
-              </button>
-
-              {/* Penetapan Hasil */}
-              <button
-                id="sidebar-link-results"
-                onClick={() => handleLinkClick('results', 'determine-selection-results', 'Hasil Seleksi')}
-                className={`w-full flex items-center justify-between px-4 py-2 transition-colors ${
-                  hasPermission('determine-selection-results')
-                    ? activeRoute === 'results'
-                      ? 'bg-blue-900 border-l-4 border-yellow-400 text-white font-semibold cursor-pointer'
-                      : 'text-blue-100 hover:bg-blue-800 hover:text-white cursor-pointer'
-                    : 'text-blue-400/40 hover:bg-blue-950/20 cursor-not-allowed'
-                }`}
-              >
-                <div className="flex items-center">
-                  <Award className="w-4 h-4 mr-3 text-amber-300 shrink-0" />
-                  <span>Hasil Seleksi</span>
-                </div>
-                {!hasPermission('determine-selection-results') && <Lock className="w-3 h-3 text-blue-400/50 shrink-0" />}
+                {!(hasPermission('view-rankings') || hasPermission('determine-selection-results')) && (
+                  <Lock className="w-3 h-3 text-blue-400/50 shrink-0" />
+                )}
               </button>
             </div>
           </div>

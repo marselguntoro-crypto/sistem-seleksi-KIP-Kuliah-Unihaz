@@ -133,11 +133,14 @@ export const InterviewScoreView: React.FC<InterviewScoreViewProps> = ({
             <MessageSquare className="w-5 h-5" />
           </span>
           <div>
-            <h1 className="text-xl font-bold text-slate-800 tracking-tight">
-              Tahap 4: Penilaian Wawancara Calon Mahasiswa
+            <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+              Tahap 3: Penilaian Wawancara Calon Mahasiswa
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">
+                Seleksi Tahap Pertama
+              </span>
             </h1>
             <p className="text-xs text-slate-500">
-              Evaluasi komitmen akademik, motivasi studi, integritas, dan kesungguhan calon penerima beasiswa KIP-Kuliah UNIHAZ.
+              Evaluasi komitmen akademik, motivasi studi, integritas, dan klarifikasi data sosial-ekonomi bersama nilai UTBK pada seleksi tahap pertama.
             </p>
           </div>
         </div>

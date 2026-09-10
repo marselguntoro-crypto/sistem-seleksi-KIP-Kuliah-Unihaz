@@ -450,10 +450,13 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
           </span>
           <div>
             <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
-              Tahap 3: Pengelolaan Nilai UTBK / TPA
+              Tahap 2: Pengelolaan Nilai UTBK / TPA
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+                Seleksi Tahap Pertama
+              </span>
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Pencatatan skor Tes Potensi Akademik / UTBK SNBT dengan opsi pengisian manual atau import massal via Excel/CSV.
+              Pencatatan skor Tes Potensi Akademik / UTBK SNBT sebagai bagian evaluasi seleksi tahap pertama bersama wawancara.
             </p>
           </div>
         </div>

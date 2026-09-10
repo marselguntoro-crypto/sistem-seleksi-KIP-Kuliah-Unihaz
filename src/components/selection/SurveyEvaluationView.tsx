@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Participant, StudyProgram, User } from '../../types';
+import { calculateStage1Score } from '../../utils/selectionUtils';
 import {
   MapPin,
   Search,
@@ -14,7 +15,9 @@ import {
   Clock,
   Sparkles,
   Sliders,
-  ChevronRight
+  ChevronRight,
+  TrendingUp,
+  FileText
 } from 'lucide-react';
 
 interface SurveyEvaluationViewProps {
@@ -32,6 +35,7 @@ export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [surveyFilter, setSurveyFilter] = useState<'ALL' | 'SURVEYED' | 'PENDING'>('ALL');
+  const [stage1Filter, setStage1Filter] = useState<'ALL' | 'STAGE1_COMPLETE' | 'STAGE1_PENDING'>('ALL');
   const [prodiFilter, setProdiFilter] = useState<string>('ALL');
 
   // Modal State
@@ -44,21 +48,24 @@ export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
 
   // Scoring rubric helpers
   const [buildingScore, setBuildingScore] = useState<number>(80);
-  const [economicScore, setEconomicScore] = useState<number>(85);
-  const [environmentScore, setEnvironmentScore] = useState<number>(85);
+  const [economicScore, setEconomicScore] = useState<number>(80);
+  const [environmentScore, setEnvironmentScore] = useState<number>(80);
 
   // Quick stats
   const stats = useMemo(() => {
     const total = participants.length;
     const surveyed = participants.filter((p) => (p.surveyScore || 0) > 0).length;
     const pending = total - surveyed;
+    const stage1Complete = participants.filter(
+      (p) => (p.utbkScore || 0) > 0 && (p.interviewScore || 0) > 0
+    ).length;
     const avgScore =
       surveyed > 0
         ? Math.round(
             (participants.reduce((sum, p) => sum + (p.surveyScore || 0), 0) / surveyed) * 10
           ) / 10
         : 0;
-    return { total, surveyed, pending, avgScore };
+    return { total, surveyed, pending, stage1Complete, avgScore };
   }, [participants]);
 
   const filteredParticipants = useMemo(() => {
@@ -75,14 +82,20 @@ export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
         (surveyFilter === 'SURVEYED' && (p.surveyScore || 0) > 0) ||
         (surveyFilter === 'PENDING' && (!p.surveyScore || p.surveyScore === 0));
 
+      const isStage1Complete = (p.utbkScore || 0) > 0 && (p.interviewScore || 0) > 0;
+      const matchesStage1 =
+        stage1Filter === 'ALL' ||
+        (stage1Filter === 'STAGE1_COMPLETE' && isStage1Complete) ||
+        (stage1Filter === 'STAGE1_PENDING' && !isStage1Complete);
+
       const matchesProdi =
         prodiFilter === 'ALL' ||
         String(p.firstChoiceProdiId) === prodiFilter ||
         p.firstChoiceProdiName.toLowerCase().includes(prodiFilter.toLowerCase());
 
-      return matchesSearch && matchesSurvey && matchesProdi;
+      return matchesSearch && matchesSurvey && matchesStage1 && matchesProdi;
     });
-  }, [participants, searchTerm, surveyFilter, prodiFilter]);
+  }, [participants, searchTerm, surveyFilter, stage1Filter, prodiFilter]);
 
   const handleOpenSurveyModal = (p: Participant) => {
     setSelectedParticipant(p);
@@ -146,11 +159,14 @@ export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
             <MapPin className="w-5 h-5" />
           </span>
           <div>
-            <h1 className="text-xl font-bold text-slate-800 tracking-tight">
-              Tahap 2: Evaluasi & Penilaian Survey Lapangan
+            <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+              Tahap 4: Penilaian Survey Lapangan
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-900 border border-cyan-300">
+                Tahap Akhir Dinamis
+              </span>
             </h1>
             <p className="text-xs text-slate-500">
-              Pencatatan verifikasi faktual lapangan kondisi rumah calon penerima KIP-Kuliah, verifikasi sosial-ekonomi, dan skor kelayakan.
+              Verifikasi faktual tempat tinggal calon mahasiswa. Bersifat dinamis dan ditambahkan sebagai tahap akhir setelah evaluasi seleksi tahap pertama (UTBK & Wawancara).
             </p>
           </div>
         </div>
@@ -160,11 +176,14 @@ export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
           <span className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-md font-semibold border border-slate-200">
             Total Target: {stats.total}
           </span>
+          <span className="px-3 py-1.5 bg-indigo-50 text-indigo-800 rounded-md font-semibold border border-indigo-200" title="Peserta yang sudah memiliki nilai UTBK dan Wawancara">
+            Lengkap Tahap 1: {stats.stage1Complete}
+          </span>
           <span className="px-3 py-1.5 bg-cyan-50 text-cyan-800 rounded-md font-semibold border border-cyan-200">
             Sudah Disurvey: {stats.surveyed}
           </span>
           <span className="px-3 py-1.5 bg-amber-50 text-amber-800 rounded-md font-semibold border border-amber-200">
-            Belum Dinilai: {stats.pending}
+            Belum Disurvey: {stats.pending}
           </span>
           <span className="px-3 py-1.5 bg-emerald-50 text-emerald-800 rounded-md font-semibold border border-emerald-200">
             Rata-rata Skor: {stats.avgScore}
@@ -174,7 +193,7 @@ export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
 
       {/* Filter and Search Bar */}
       <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-xs flex flex-col md:flex-row gap-3 items-center justify-between">
-        <div className="relative w-full md:w-80">
+        <div className="relative w-full md:w-72">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
@@ -186,9 +205,10 @@ export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
         </div>
 
         <div className="flex flex-wrap gap-2 w-full md:w-auto items-center">
+          {/* Filter Status Survey */}
           <div className="flex items-center gap-1.5 text-xs text-slate-600">
             <Filter className="w-3.5 h-3.5 text-slate-400" />
-            <span>Filter Survey:</span>
+            <span>Survey:</span>
           </div>
           <select
             value={surveyFilter}
@@ -197,7 +217,19 @@ export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
           >
             <option value="ALL">Semua Peserta</option>
             <option value="SURVEYED">Sudah Disurvey (Ada Nilai)</option>
-            <option value="PENDING">Belum Disurvey</option>
+            <option value="PENDING">Belum Disurvey (Dinamis)</option>
+          </select>
+
+          {/* Filter Seleksi Tahap 1 (UTBK + Wawancara) */}
+          <select
+            value={stage1Filter}
+            onChange={(e) => setStage1Filter(e.target.value as any)}
+            className="text-xs border border-slate-300 rounded-md px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-600"
+            title="Saring berdasarkan kesiapan seleksi tahap pertama"
+          >
+            <option value="ALL">Semua Status Tahap 1</option>
+            <option value="STAGE1_COMPLETE">Prioritas Survey (Tahap 1 Lengkap)</option>
+            <option value="STAGE1_PENDING">Tahap 1 Belum Lengkap</option>
           </select>
 
           <select
@@ -221,12 +253,13 @@ export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
           <table className="w-full text-left text-xs text-slate-600">
             <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
               <tr>
-                <th className="py-3 px-4">No</th>
+                <th className="py-3 px-3 text-center">No</th>
                 <th className="py-3 px-4">Calon Mahasiswa</th>
-                <th className="py-3 px-4">Lokasi / Alamat Domisili</th>
-                <th className="py-3 px-4">Desil & Ekonomi</th>
-                <th className="py-3 px-4">Kondisi Rumah</th>
-                <th className="py-3 px-4">Petugas & Tanggal Survey</th>
+                <th className="py-3 px-3">Seleksi Tahap 1 (UTBK & Wawancara)</th>
+                <th className="py-3 px-4">Lokasi & Alamat</th>
+                <th className="py-3 px-3">Desil & Ekonomi</th>
+                <th className="py-3 px-3">Kondisi Rumah</th>
+                <th className="py-3 px-3">Petugas & Tanggal</th>
                 <th className="py-3 px-4 text-center">Nilai Survey (0-100)</th>
                 <th className="py-3 px-4 text-center">Aksi</th>
               </tr>
@@ -234,16 +267,19 @@ export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
             <tbody className="divide-y divide-slate-200">
               {filteredParticipants.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400">
+                  <td colSpan={9} className="py-8 text-center text-slate-400">
                     Tidak ada data peserta yang memenuhi filter survey.
                   </td>
                 </tr>
               ) : (
                 filteredParticipants.map((p, idx) => {
                   const hasSurvey = (p.surveyScore || 0) > 0;
+                  const s1Score = calculateStage1Score(p.utbkScore, p.interviewScore);
+                  const isStage1Complete = (p.utbkScore || 0) > 0 && (p.interviewScore || 0) > 0;
+
                   return (
                     <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3 px-4 font-medium text-slate-500">{idx + 1}</td>
+                      <td className="py-3 px-3 text-center font-medium text-slate-500">{idx + 1}</td>
                       <td className="py-3 px-4">
                         <div className="font-bold text-slate-800">{p.name}</div>
                         <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
@@ -253,7 +289,28 @@ export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
                           <span>{p.firstChoiceProdiName}</span>
                         </div>
                       </td>
-                      <td className="py-3 px-4 max-w-[220px]">
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`inline-block px-2 py-0.5 rounded font-bold text-[11px] font-mono ${
+                            isStage1Complete ? 'bg-indigo-50 text-indigo-900 border border-indigo-200' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            Skor T1: {s1Score.toFixed(1)}
+                          </span>
+                          {isStage1Complete ? (
+                            <span className="text-[10px] text-emerald-700 font-semibold flex items-center gap-0.5">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Siap Survey
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-amber-600 italic">
+                              Nilai T1 belum lengkap
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">
+                          UTBK: {p.utbkScore ? p.utbkScore.toFixed(1) : '-'} | Wwn: {p.interviewScore ? p.interviewScore.toFixed(1) : '-'}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 max-w-[200px]">
                         <div className="font-medium text-slate-800 truncate" title={p.address}>
                           {p.address}
                         </div>
@@ -261,39 +318,39 @@ export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
                           {p.city}, {p.province}
                         </div>
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-3">
                         <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
                           {p.desil}
                         </span>
-                        <div className="text-[11px] text-slate-500 mt-0.5">
-                          Rp {p.parentIncome.toLocaleString('id-ID')} / {p.familyDependents} org
+                        <div className="text-[10px] text-slate-500 mt-0.5">
+                          Rp {p.parentIncome.toLocaleString('id-ID')}
                         </div>
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-3">
                         <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700">
                           <Home className="w-3.5 h-3.5 text-slate-400" />
                           {p.houseCondition || 'Belum Dinilai'}
                         </span>
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-3">
                         {p.surveyDate ? (
                           <div>
-                            <div className="flex items-center gap-1 text-slate-700">
+                            <div className="flex items-center gap-1 text-slate-700 text-[11px]">
                               <Calendar className="w-3 h-3 text-slate-400" />
                               <span>{p.surveyDate}</span>
                             </div>
-                            <div className="text-[11px] text-slate-500">
+                            <div className="text-[10px] text-slate-500">
                               Oleh: {p.surveyorName || '-'}
                             </div>
                           </div>
                         ) : (
-                          <span className="text-slate-400 italic text-[11px]">Belum dijadwalkan</span>
+                          <span className="text-slate-400 italic text-[10px]">Belum dijadwalkan</span>
                         )}
                       </td>
                       <td className="py-3 px-4 text-center">
                         {hasSurvey ? (
                           <span
-                            className={`inline-block px-2.5 py-1 rounded-md font-bold text-xs ${
+                            className={`inline-block px-2.5 py-1 rounded-md font-bold text-xs font-mono ${
                               (p.surveyScore || 0) >= 85
                                 ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                                 : (p.surveyScore || 0) >= 70
@@ -304,7 +361,9 @@ export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
                             {p.surveyScore?.toFixed(1)}
                           </span>
                         ) : (
-                          <span className="text-slate-400 text-xs italic">0.0</span>
+                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500 border border-slate-200">
+                            Belum Disurvey
+                          </span>
                         )}
                       </td>
                       <td className="py-3 px-4 text-center">

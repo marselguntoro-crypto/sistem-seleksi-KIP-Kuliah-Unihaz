@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { SEEDED_USERS } from '../data/mockData';
-import { ShieldCheck, Lock, User as UserIcon, AlertCircle, CheckCircle2, ArrowRight } from 'lucide-react';
+import { ShieldCheck, Lock, User as UserIcon, AlertCircle, ArrowRight } from 'lucide-react';
 
 interface LoginViewProps {
   onLoginSuccess: (user: User) => void;
@@ -89,46 +89,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, availableU
               <span>{errorMessage}</span>
             </div>
           )}
-
-          {/* Quick Role Selection for Login */}
-          <div className="mb-5">
-            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
-              Pilih Role Akses Akun:
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {availableUsers.map((user) => {
-                const isSelected = username === user.username;
-                return (
-                  <button
-                    key={user.id}
-                    type="button"
-                    onClick={() => {
-                      setUsername(user.username);
-                      setPassword(user.password || (user.role === 'Super Admin' ? 'Admin@12345' : 'Operator@12345'));
-                      setErrorMessage(null);
-                    }}
-                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                      isSelected
-                        ? 'border-blue-700 bg-blue-50/90 text-blue-950 ring-2 ring-blue-600/30 font-semibold'
-                        : 'border-slate-200 bg-slate-50/70 hover:bg-slate-100/80 text-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-slate-900 leading-tight">
-                        {user.role}
-                      </span>
-                      {isSelected && (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-blue-800 shrink-0" />
-                      )}
-                    </div>
-                    <div className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">
-                      @{user.username}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>

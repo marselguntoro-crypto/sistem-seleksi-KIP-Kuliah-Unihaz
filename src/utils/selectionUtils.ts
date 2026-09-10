@@ -80,9 +80,28 @@ export const calculateParticipantFinalScore = (
   interviewScore: number = 0,
   surveyScore: number = 0,
   desil: DesilCategory | string = 'Desil 3',
-  weights: SelectionWeights = DEFAULT_SELECTION_WEIGHTS
+  weights: SelectionWeights = DEFAULT_SELECTION_WEIGHTS,
+  normalizeIfNoSurvey: boolean = false
 ): number => {
   const affirmationScore = getDesilAffirmationScore(desil);
+
+  // Jika survey bersifat dinamis dan belum dilakukan (surveyScore 0) serta dinormalisasi
+  if (normalizeIfNoSurvey && (!surveyScore || surveyScore === 0)) {
+    const effectiveWeightsSum =
+      (weights.utbkWeight || 0) +
+      (weights.interviewWeight || 0) +
+      (weights.affirmationWeight || 0);
+
+    if (effectiveWeightsSum > 0) {
+      const normalizedScore =
+        (utbkScore * (weights.utbkWeight || 0) +
+          interviewScore * (weights.interviewWeight || 0) +
+          affirmationScore * (weights.affirmationWeight || 0)) /
+        effectiveWeightsSum;
+      return Math.round(normalizedScore * 100) / 100;
+    }
+  }
+
   const total =
     (utbkScore * weights.utbkWeight) / 100 +
     (interviewScore * weights.interviewWeight) / 100 +
@@ -90,4 +109,25 @@ export const calculateParticipantFinalScore = (
     (affirmationScore * weights.affirmationWeight) / 100;
 
   return Math.round(total * 100) / 100;
+};
+
+/**
+ * Perhitungan Skor Seleksi Tahap Pertama (Akademik UTBK & Wawancara).
+ * Tahap pertama menyaring pendaftar berdasarkan kemampuan akademik dan komitmen
+ * sebelum survey lapangan ditambahkan di tahap akhir secara dinamis.
+ */
+export const calculateStage1Score = (
+  utbkScore: number = 0,
+  interviewScore: number = 0,
+  weights: SelectionWeights = DEFAULT_SELECTION_WEIGHTS
+): number => {
+  const combinedWeight = (weights.utbkWeight || 35) + (weights.interviewWeight || 25);
+  if (combinedWeight === 0) return 0;
+
+  const score =
+    (utbkScore * (weights.utbkWeight || 35) +
+      interviewScore * (weights.interviewWeight || 25)) /
+    combinedWeight;
+
+  return Math.round(score * 100) / 100;
 };

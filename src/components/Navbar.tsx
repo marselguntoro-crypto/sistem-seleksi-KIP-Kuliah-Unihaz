@@ -1,95 +1,38 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { User } from '../types';
-import { Menu, LogOut, Code, ShieldCheck, CheckCircle2, ChevronDown, User as UserIcon, Shield, Check } from 'lucide-react';
+import { Menu, LogOut, Code, CheckCircle2, ChevronDown, User as UserIcon, Mail, Shield } from 'lucide-react';
 
 interface NavbarProps {
   currentUser: User | null;
   onLogout: () => void;
   onOpenCodeExplorer: () => void;
   onOpenTestRunner: () => void;
-  onSwitchRole?: (user: User) => void;
-  availableUsers: User[];
   onToggleSidebar: () => void;
   activeTab: 'dashboard' | 'tests' | 'code';
   setActiveTab: (tab: 'dashboard' | 'tests' | 'code') => void;
 }
-
-const ROLE_DETAILS: Record<string, { description: string; responsibilities: string[]; permissions: string[]; badgeColor: string }> = {
-  'Super Admin': {
-    description: 'Administrator Tertinggi dengan wewenang penuh atas konfigurasi dan seluruh alur seleksi KIP-Kuliah UNIHAZ.',
-    responsibilities: [
-      'Manajemen data master (tahun akademik, fakultas, prodi, dan kuota penerimaan).',
-      'Pengelolaan akun operator dan penugasan hak akses role (Spatie RBAC).',
-      'Pengaturan bobot seleksi (berkas, survey, UTBK, wawancara).',
-      'Pemantauan audit log dan backup/restore database.'
-    ],
-    permissions: ['Semua Modul & Fitur Terbuka Penuh (Full Access)'],
-    badgeColor: 'bg-rose-100 text-rose-800 border-rose-300'
-  },
-  'Operator Pemberkasan': {
-    description: 'Petugas Verifikator Berkas Pendaftaran KIP-Kuliah (Tahap 1 Seleksi Administrasi).',
-    responsibilities: [
-      'Pencatatan dan penerimaan berkas fisik pendaftaran dari calon mahasiswa.',
-      'Pemeriksaan kelengkapan dokumen wajib (KTP, KK, KIP/KKS, Slip Gaji, Foto Rumah, dll).',
-      'Penginputan tanggal pemeriksaan dan penugasan verifikator/pengecek berkas.',
-      'Import data verifikasi berkas secara massal via format Excel.'
-    ],
-    permissions: ['Verifikasi Berkas Pendaftaran', 'Import Verifikasi Berkas', 'Data Calon Peserta'],
-    badgeColor: 'bg-blue-100 text-blue-800 border-blue-300'
-  },
-  'Operator SPMB': {
-    description: 'Petugas Seleksi Penerimaan Mahasiswa Baru & Penguji Akademik UNIHAZ.',
-    responsibilities: [
-      'Penginputan dan validasi nilai UTBK / Tes Potensi Akademik.',
-      'Penilaian wawancara motivasi, komitmen, dan wawasan akademik.',
-      'Penyusunan rekapitulasi nilai seleksi akademik pendaftar.'
-    ],
-    permissions: ['Penilaian UTBK / Tes Tertulis', 'Penilaian Wawancara', 'Data Calon Peserta'],
-    badgeColor: 'bg-purple-100 text-purple-800 border-purple-300'
-  },
-  'Operator Survey': {
-    description: 'Petugas Verifikasi Faktual & Validasi Lapangan Kondisi Ekonomi Calon Mahasiswa.',
-    responsibilities: [
-      'Kunjungan dan validasi faktual ke rumah pendaftar KIP-Kuliah.',
-      'Pemeriksaan kondisi fisik rumah, daya listrik, dan aset keluarga.',
-      'Validasi data desil kemiskinan (P3KE / DTKS Kemensos).',
-      'Pemberian rekomendasi kelayakan penerima beasiswa.'
-    ],
-    permissions: ['Survey & Validasi Lapangan', 'Penilaian Kondisi Ekonomi', 'Data Calon Peserta'],
-    badgeColor: 'bg-amber-100 text-amber-800 border-amber-300'
-  }
-};
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
   onLogout,
   onOpenCodeExplorer,
   onOpenTestRunner,
-  onSwitchRole,
-  availableUsers,
   onToggleSidebar,
   activeTab,
   setActiveTab
 }) => {
-  const [roleDropdownOpen, setRoleDropdownOpen] = React.useState(false);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setRoleDropdownOpen(false);
+        setProfileDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const roleInfo = currentUser ? ROLE_DETAILS[currentUser.role] || {
-    description: `Pengguna sistem dengan peran ${currentUser.role}.`,
-    responsibilities: ['Mengelola modul sesuai kewenangan role yang diberikan.'],
-    permissions: [currentUser.role],
-    badgeColor: 'bg-slate-100 text-slate-800 border-slate-300'
-  } : null;
 
   return (
     <header className="sticky top-0 z-30 bg-white border-b border-slate-200 text-slate-800 shadow-2xs">
@@ -165,106 +108,92 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
 
-        {/* Right: User Profile & Role Info */}
+        {/* Right: User Profile & Actions */}
         <div className="flex items-center gap-2 sm:gap-3">
           {currentUser && (
             <div className="relative" ref={dropdownRef}>
               <button
-                id="role-profile-dropdown-btn"
-                onClick={() => setRoleDropdownOpen(!roleDropdownOpen)}
+                id="user-profile-dropdown-btn"
+                onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
                 className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-left transition-colors cursor-pointer"
-                title="Informasi Profil & Penjelasan Hak Akses Role"
+                title="Profil Pengguna"
               >
-                <div className="w-7 h-7 rounded-full bg-blue-100 border border-blue-300 text-blue-900 flex items-center justify-center text-xs font-bold">
-                  {currentUser.role[0]}
+                <div className="w-7 h-7 rounded-full bg-blue-900 text-yellow-300 flex items-center justify-center text-xs font-bold shadow-xs">
+                  {currentUser.name.charAt(0)}
                 </div>
                 <div className="hidden lg:block">
                   <div className="text-xs font-bold text-slate-800">{currentUser.name.split(' ')[0]}</div>
-                  <span className="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.2 rounded font-bold uppercase tracking-wider">
+                  <span className="text-[10px] text-slate-500 font-medium">
                     {currentUser.role}
                   </span>
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
               </button>
 
-              {/* Profile & Role Explanation Dropdown */}
-              {roleDropdownOpen && roleInfo && (
+              {/* User Profile Dropdown */}
+              {profileDropdownOpen && (
                 <div 
-                  className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-white border border-slate-200 shadow-2xl py-3 px-4 z-50 text-xs animate-in fade-in zoom-in-95 duration-150 space-y-3"
+                  className="absolute right-0 mt-2 w-72 rounded-2xl bg-white border border-slate-200 shadow-2xl py-3 px-4 z-50 text-xs animate-in fade-in zoom-in-95 duration-150 space-y-3"
                 >
-                  {/* Account Header */}
-                  <div className="flex items-start justify-between border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-10 h-10 rounded-full bg-blue-900 text-yellow-300 flex items-center justify-center font-bold text-sm shadow-xs">
-                        {currentUser.name[0]}
+                  {/* Account Identity */}
+                  <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+                    <div className="w-10 h-10 rounded-full bg-blue-900 text-yellow-300 flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
+                      {currentUser.name.charAt(0)}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-900 text-sm leading-snug truncate">
+                        {currentUser.name}
                       </div>
-                      <div>
-                        <div className="font-bold text-slate-900 text-sm leading-snug">{currentUser.name}</div>
-                        <div className="text-[11px] text-slate-500 font-mono">@{currentUser.username} &bull; {currentUser.email}</div>
+                      <div className="text-[11px] text-slate-500 font-mono truncate">
+                        @{currentUser.username}
                       </div>
                     </div>
                   </div>
 
-                  {/* Active Role Badge & Description */}
-                  <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 space-y-2">
+                  {/* Profile Details */}
+                  <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 space-y-2 text-xs">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                        Peran Aktif Akun (Role)
+                      <span className="text-slate-500 font-medium flex items-center gap-1.5">
+                        <Shield className="w-3.5 h-3.5 text-slate-400" />
+                        Peran:
                       </span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${roleInfo.badgeColor}`}>
+                      <span className="font-semibold text-blue-950 bg-blue-100/70 border border-blue-200 px-2 py-0.5 rounded-full text-[10px]">
                         {currentUser.role}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-700 leading-relaxed">
-                      {roleInfo.description}
-                    </p>
-                  </div>
-
-                  {/* Responsibilities */}
-                  <div className="space-y-1.5">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                      <Shield className="w-3.5 h-3.5 text-blue-800" />
-                      <span>Tugas & Tanggung Jawab Role</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 font-medium flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5 text-slate-400" />
+                        Email:
+                      </span>
+                      <span className="font-mono text-slate-700 text-[11px] truncate max-w-[130px]" title={currentUser.email}>
+                        {currentUser.email}
+                      </span>
                     </div>
-                    <ul className="space-y-1 text-[11px] text-slate-600 pl-1">
-                      {roleInfo.responsibilities.map((resp, idx) => (
-                        <li key={idx} className="flex items-start gap-1.5">
-                          <Check className="w-3 h-3 text-emerald-600 mt-0.5 shrink-0" />
-                          <span className="leading-snug">{resp}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Module Permissions */}
-                  <div className="space-y-1.5 pt-1 border-t border-slate-100">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Hak Akses Modul Resmi</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {roleInfo.permissions.map((perm, idx) => (
-                        <span key={idx} className="px-2 py-0.5 rounded bg-blue-50 text-blue-900 border border-blue-200 text-[10px] font-medium">
-                          {perm}
-                        </span>
-                      ))}
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 font-medium flex items-center gap-1.5">
+                        <UserIcon className="w-3.5 h-3.5 text-slate-400" />
+                        Status:
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 text-emerald-700 font-semibold text-[11px]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        Aktif
+                      </span>
                     </div>
                   </div>
 
-                  {/* Session Footer & Switch Action */}
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
-                    <div className="text-slate-400 font-mono text-[10px]">
-                      Sesi: Spatie RBAC Aktif
-                    </div>
+                  {/* Actions Footer */}
+                  <div className="pt-2 border-t border-slate-100">
                     <button
+                      id="profile-logout-btn"
                       onClick={() => {
-                        setRoleDropdownOpen(false);
+                        setProfileDropdownOpen(false);
                         onLogout();
                       }}
-                      className="inline-flex items-center gap-1 font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+                      className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 transition-colors cursor-pointer"
                     >
-                      <LogOut className="w-3 h-3" />
-                      <span>Ganti Akun / Logout</span>
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Keluar (Logout)</span>
                     </button>
                   </div>
                 </div>
