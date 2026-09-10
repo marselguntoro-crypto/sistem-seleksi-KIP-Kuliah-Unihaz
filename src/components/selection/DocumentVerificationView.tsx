@@ -260,7 +260,7 @@ export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> =
                 </tr>
               ) : (
                 filteredParticipants.map((p, idx) => (
-                  <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
+                  <tr key={`doc-row-${p.id}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-4 font-medium text-slate-500">{idx + 1}</td>
                     <td className="py-3 px-4">
                       <div className="font-bold text-slate-800">{p.name}</div>

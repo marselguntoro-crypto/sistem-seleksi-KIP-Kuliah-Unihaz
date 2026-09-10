@@ -315,7 +315,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 </tr>
               ) : (
                 filteredParticipants.map((p, index) => (
-                  <tr key={p.id} className="border-b border-slate-200">
+                  <tr key={`report-row-${p.id}-${index}`} className="border-b border-slate-200">
                     <td className="py-1.5 px-2 border border-slate-300 text-center font-medium">
                       {index + 1}
                     </td>

@@ -278,7 +278,7 @@ export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
                   const isStage1Complete = (p.utbkScore || 0) > 0 && (p.interviewScore || 0) > 0;
 
                   return (
-                    <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
+                    <tr key={`survey-row-${p.id}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
                       <td className="py-3 px-3 text-center font-medium text-slate-500">{idx + 1}</td>
                       <td className="py-3 px-4">
                         <div className="font-bold text-slate-800">{p.name}</div>

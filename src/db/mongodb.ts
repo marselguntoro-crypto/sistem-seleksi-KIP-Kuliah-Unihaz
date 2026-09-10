@@ -29,12 +29,20 @@ export function cleanMongoUri(raw: string): string {
   return uri;
 }
 
+export function isValidMongoScheme(uri: string): boolean {
+  return uri.startsWith('mongodb://') || uri.startsWith('mongodb+srv://');
+}
+
 export function getMongoUri(): string | null {
   const uri = process.env.MONGODB_URI;
   if (!uri) return null;
   const cleaned = cleanMongoUri(uri);
   // If the user has not replaced the placeholder <db_password>, it cannot connect yet
   if (cleaned.includes('<db_password>') || cleaned.includes('<password>')) {
+    return null;
+  }
+  // Validate scheme: must start with mongodb:// or mongodb+srv://
+  if (!isValidMongoScheme(cleaned)) {
     return null;
   }
   return cleaned;
@@ -93,12 +101,20 @@ export function getMongoConnectionStatus(): {
   error: string | null;
 } {
   const rawUri = process.env.MONGODB_URI || '';
-  const hasPlaceholder = rawUri.includes('<db_password>') || rawUri.includes('<password>');
+  const cleaned = cleanMongoUri(rawUri);
+  const hasPlaceholder = cleaned.includes('<db_password>') || cleaned.includes('<password>');
+  const isValidScheme = isValidMongoScheme(cleaned);
+
+  let errorMsg = connectionError;
+  if (rawUri && !hasPlaceholder && !isValidScheme) {
+    errorMsg = 'Format MONGODB_URI harus diawali dengan "mongodb://" atau "mongodb+srv://" (contoh: mongodb+srv://username:password@cluster0.xxx.mongodb.net/dbname)';
+  }
+
   return {
-    configured: Boolean(rawUri && !hasPlaceholder),
+    configured: Boolean(rawUri && !hasPlaceholder && isValidScheme),
     connected: Boolean(cachedDb),
     hasPlaceholderPassword: hasPlaceholder,
-    error: connectionError
+    error: errorMsg
   };
 }
 

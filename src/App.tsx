@@ -242,6 +242,7 @@ export default function App() {
   // Automatically derive ranking list from current participants
   useEffect(() => {
     const scoreItems: ParticipantScoreItem[] = participants.map((p) => ({
+      id: p.id,
       rank: p.rank || 1,
       name: p.name,
       regNumber: p.regNumber,
@@ -859,6 +860,7 @@ export default function App() {
                 studyPrograms={studyPrograms}
                 currentUser={currentUser}
                 onUpdateParticipant={handleUpdateParticipant}
+                onBatchUpdateParticipants={handleBatchUpdateParticipants}
               />
             ) : activeRoute === 'ranking' || activeRoute === 'results' ? (
               <RankingResultsView

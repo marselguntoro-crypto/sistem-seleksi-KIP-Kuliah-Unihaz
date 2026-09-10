@@ -665,7 +665,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
 
                   return (
                     <tr
-                      key={item.id}
+                      key={`p-row-${item.id}-${idx}`}
                       className={`hover:bg-blue-50/40 border-b border-slate-100 transition-colors ${
                         isSelected ? 'bg-blue-50/70' : ''
                       }`}

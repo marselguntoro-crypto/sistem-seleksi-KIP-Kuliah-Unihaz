@@ -1104,7 +1104,7 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredParticipants.map((p) => {
+                filteredParticipants.map((p, idx) => {
                   const isTop3 = (p.rank || 999) <= 3;
                   const prodiObj =
                     prodiLookup.byId.get(p.firstChoiceProdiId) ||
@@ -1112,7 +1112,7 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
 
                   return (
                     <tr
-                      key={p.id}
+                      key={`rank-row-${p.id}-${idx}`}
                       className={`hover:bg-slate-50/80 transition-colors ${
                         p.selectionStatus === 'Lulus'
                           ? 'bg-emerald-50/20'

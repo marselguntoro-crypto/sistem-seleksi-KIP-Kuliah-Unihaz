@@ -555,9 +555,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredRankings.map((item) => (
+                filteredRankings.map((item, idx) => (
                   <tr
-                    key={item.regNumber}
+                    key={item.id != null ? `rank-p-${item.id}` : `rank-row-${item.regNumber}-${idx}`}
                     className="hover:bg-slate-50 border-b border-slate-100 transition-colors"
                   >
                     <td className="py-2.5 px-3 text-center">

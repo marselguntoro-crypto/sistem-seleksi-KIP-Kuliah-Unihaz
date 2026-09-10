@@ -215,6 +215,7 @@ export interface DashboardStats {
 }
 
 export interface ParticipantScoreItem {
+  id?: number;
   rank: number;
   name: string;
   regNumber: string;
