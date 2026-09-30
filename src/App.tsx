@@ -673,7 +673,12 @@ export default function App() {
   const dynamicStats: DashboardStats = useMemo(() => {
     const totalParticipants = participants.length;
     const documentVerificationDone = participants.filter((p) => p.documentStatus === 'Lengkap').length;
-    const passed = participants.filter((p) => p.selectionStatus === 'Lulus').length;
+    const isPassed = (status?: string) =>
+      status === 'Lulus' ||
+      status === 'Lulus KIP DIKTI' ||
+      status === 'Lulus KIP Aspirasi' ||
+      status === 'Lulus KIP Jalur Lainnya';
+    const passed = participants.filter((p) => isPassed(p.selectionStatus)).length;
     const failed = participants.filter((p) => p.selectionStatus === 'Tidak Lulus').length;
     const reserved = participants.filter((p) => p.selectionStatus === 'Cadangan').length;
 

@@ -132,7 +132,13 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
               <div className="mt-0.5">
                 <span
                   className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                    participant.selectionStatus === 'Lulus'
+                    participant.selectionStatus === 'Lulus KIP DIKTI'
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      : participant.selectionStatus === 'Lulus KIP Aspirasi'
+                      ? 'bg-indigo-100 text-indigo-900 border border-indigo-300'
+                      : participant.selectionStatus === 'Lulus KIP Jalur Lainnya'
+                      ? 'bg-teal-100 text-teal-900 border border-teal-300'
+                      : participant.selectionStatus === 'Lulus'
                       ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                       : participant.selectionStatus === 'Cadangan'
                       ? 'bg-amber-100 text-amber-800 border border-amber-300'
@@ -141,7 +147,7 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
                       : 'bg-slate-200 text-slate-700'
                   }`}
                 >
-                  {participant.selectionStatus}
+                  {participant.selectionStatus || 'Belum Diproses'}
                 </span>
               </div>
             </div>

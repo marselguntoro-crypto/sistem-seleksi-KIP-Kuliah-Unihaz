@@ -34,7 +34,14 @@ export interface DocumentRequirement {
 
 export type DocumentStatus = 'Belum Diverifikasi' | 'Lengkap' | 'Perlu Perbaikan' | 'Ditolak';
 
-export type SelectionStatus = 'Belum Diproses' | 'Lulus' | 'Cadangan' | 'Tidak Lulus';
+export type SelectionStatus = 
+  | 'Lulus KIP DIKTI' 
+  | 'Lulus KIP Aspirasi' 
+  | 'Tidak Lulus' 
+  | 'Belum Diproses' 
+  | 'Cadangan' 
+  | 'Lulus KIP Jalur Lainnya'
+  | 'Lulus';
 
 export type HouseCondition = 'Sangat Sederhana' | 'Sederhana' | 'Menengah' | 'Permanen';
 

@@ -120,8 +120,14 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
       }
 
       // Selection Status Filter
-      if (selectedSelectionStatus !== 'ALL' && item.selectionStatus !== selectedSelectionStatus) {
-        return false;
+      if (selectedSelectionStatus !== 'ALL') {
+        if (selectedSelectionStatus === 'ALL_PASSED') {
+          if (!['Lulus', 'Lulus KIP DIKTI', 'Lulus KIP Aspirasi', 'Lulus KIP Jalur Lainnya'].includes(item.selectionStatus)) {
+            return false;
+          }
+        } else if (item.selectionStatus !== selectedSelectionStatus) {
+          return false;
+        }
       }
 
       return true;
@@ -516,10 +522,13 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
               className="w-full text-xs py-1.5 px-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-800"
             >
               <option value="ALL">Semua Status</option>
-              <option value="Lulus">Lulus</option>
-              <option value="Cadangan">Cadangan</option>
+              <option value="ALL_PASSED">Semua Lulus (DIKTI, Aspirasi, Lainnya)</option>
+              <option value="Lulus KIP DIKTI">Lulus KIP DIKTI</option>
+              <option value="Lulus KIP Aspirasi">Lulus KIP Aspirasi</option>
               <option value="Tidak Lulus">Tidak Lulus</option>
               <option value="Belum Diproses">Belum Diproses</option>
+              <option value="Cadangan">Cadangan</option>
+              <option value="Lulus KIP Jalur Lainnya">Lulus KIP Jalur Lainnya</option>
             </select>
           </div>
         </div>
@@ -767,14 +776,22 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
                             <div className="mt-0.5">
                               <span
                                 className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
-                                  item.selectionStatus === 'Lulus'
+                                  item.selectionStatus === 'Lulus KIP DIKTI'
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                    : item.selectionStatus === 'Lulus KIP Aspirasi'
+                                    ? 'bg-indigo-100 text-indigo-900 border border-indigo-300'
+                                    : item.selectionStatus === 'Lulus KIP Jalur Lainnya'
+                                    ? 'bg-teal-100 text-teal-900 border border-teal-300'
+                                    : item.selectionStatus === 'Lulus'
                                     ? 'bg-emerald-100 text-emerald-800'
                                     : item.selectionStatus === 'Cadangan'
                                     ? 'bg-amber-100 text-amber-800'
-                                    : 'bg-rose-100 text-rose-800'
+                                    : item.selectionStatus === 'Tidak Lulus'
+                                    ? 'bg-rose-100 text-rose-800'
+                                    : 'bg-slate-100 text-slate-600'
                                 }`}
                               >
-                                {item.selectionStatus}
+                                {item.selectionStatus || 'Belum Diproses'}
                               </span>
                             </div>
                           </div>

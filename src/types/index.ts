@@ -32,6 +32,15 @@ export interface DashboardStats {
   reserved: number;
 }
 
+export type SelectionStatus = 
+  | 'Lulus KIP DIKTI' 
+  | 'Lulus KIP Aspirasi' 
+  | 'Tidak Lulus' 
+  | 'Belum Diproses' 
+  | 'Cadangan' 
+  | 'Lulus KIP Jalur Lainnya'
+  | 'Lulus';
+
 export interface ParticipantScoreItem {
   rank: number;
   name: string;
@@ -42,7 +51,7 @@ export interface ParticipantScoreItem {
   interviewScore: number;
   surveyScore: number;
   finalScore: number;
-  status: 'Lulus' | 'Tidak Lulus' | 'Cadangan' | 'Belum Diproses';
+  status: SelectionStatus;
 }
 
 export interface LaravelFile {
@@ -155,7 +164,7 @@ export interface Participant {
   // Phase 3: Scoring & Ranking
   affirmationScore?: number;
   finalScore?: number;
-  selectionStatus: 'Belum Diproses' | 'Lulus' | 'Cadangan' | 'Tidak Lulus';
+  selectionStatus: SelectionStatus;
   rank?: number;
   notes?: string;
   createdAt: string;

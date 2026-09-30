@@ -26,8 +26,15 @@ import {
   ArrowUpDown,
   MapPin,
   FileText,
-  Tag
+  Tag,
+  Clock
 } from 'lucide-react';
+
+export const isPassedStatus = (status?: string) =>
+  status === 'Lulus' ||
+  status === 'Lulus KIP DIKTI' ||
+  status === 'Lulus KIP Aspirasi' ||
+  status === 'Lulus KIP Jalur Lainnya';
 
 interface RankingResultsViewProps {
   participants: Participant[];
@@ -60,6 +67,7 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [surveyFilterState, setSurveyFilterState] = useState<'ALL' | 'SURVEYED' | 'UNSURVEYED'>('ALL');
   const [rankingMode, setRankingMode] = useState<'FINAL' | 'STAGE1'>('FINAL');
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
   // Weight configuration panel open/close
   const [isWeightsOpen, setIsWeightsOpen] = useState(false);
@@ -219,7 +227,9 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
         p.desil === desilFilter;
 
       const matchesStatus =
-        statusFilter === 'ALL' || p.selectionStatus === statusFilter;
+        statusFilter === 'ALL' ||
+        (statusFilter === 'ALL_PASSED' && isPassedStatus(p.selectionStatus)) ||
+        p.selectionStatus === statusFilter;
 
       const matchesSurvey =
         surveyFilterState === 'ALL' ||
@@ -256,10 +266,13 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
           p.firstChoiceProdiId === prodi.id ||
           p.firstChoiceProdiName.toLowerCase().trim() === prodi.name.toLowerCase().trim()
       );
-      const passedCount = prodiApplicants.filter((p) => p.selectionStatus === 'Lulus').length;
+      const passedCount = prodiApplicants.filter((p) => isPassedStatus(p.selectionStatus)).length;
+      const passedDiktiCount = prodiApplicants.filter((p) => p.selectionStatus === 'Lulus KIP DIKTI').length;
+      const passedAspirasiCount = prodiApplicants.filter((p) => p.selectionStatus === 'Lulus KIP Aspirasi').length;
+      const passedLainnyaCount = prodiApplicants.filter((p) => p.selectionStatus === 'Lulus KIP Jalur Lainnya').length;
       const reservedCount = prodiApplicants.filter((p) => p.selectionStatus === 'Cadangan').length;
       const failedCount = prodiApplicants.filter((p) => p.selectionStatus === 'Tidak Lulus').length;
-      const unassessedCount = prodiApplicants.filter((p) => p.selectionStatus === 'Belum Diproses').length;
+      const unassessedCount = prodiApplicants.filter((p) => !p.selectionStatus || p.selectionStatus === 'Belum Diproses').length;
       const remainingQuota = Math.max(0, prodi.quota - passedCount);
 
       return {
@@ -267,6 +280,9 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
         totalApplicants: prodiApplicants.length,
         quota: prodi.quota,
         passedCount,
+        passedDiktiCount,
+        passedAspirasiCount,
+        passedLainnyaCount,
         reservedCount,
         failedCount,
         unassessedCount,
@@ -293,10 +309,13 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
   // Aggregate stats for the current view/filter for monitoring graduation
   const monitoringStats = useMemo(() => {
     const totalApplicants = filteredParticipants.length;
-    const passedCount = filteredParticipants.filter((p) => p.selectionStatus === 'Lulus').length;
+    const passedCount = filteredParticipants.filter((p) => isPassedStatus(p.selectionStatus)).length;
+    const passedDiktiCount = filteredParticipants.filter((p) => p.selectionStatus === 'Lulus KIP DIKTI').length;
+    const passedAspirasiCount = filteredParticipants.filter((p) => p.selectionStatus === 'Lulus KIP Aspirasi').length;
+    const passedLainnyaCount = filteredParticipants.filter((p) => p.selectionStatus === 'Lulus KIP Jalur Lainnya').length;
     const reservedCount = filteredParticipants.filter((p) => p.selectionStatus === 'Cadangan').length;
     const failedCount = filteredParticipants.filter((p) => p.selectionStatus === 'Tidak Lulus').length;
-    const unassessedCount = filteredParticipants.filter((p) => p.selectionStatus === 'Belum Diproses').length;
+    const unassessedCount = filteredParticipants.filter((p) => !p.selectionStatus || p.selectionStatus === 'Belum Diproses').length;
 
     const totalQuota = filteredQuotaSummary.reduce((acc, q) => acc + q.quota, 0);
     const fillRate = totalQuota > 0 ? Math.round((passedCount / totalQuota) * 100) : 0;
@@ -324,6 +343,9 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
       totalApplicants,
       totalQuota,
       passedCount,
+      passedDiktiCount,
+      passedAspirasiCount,
+      passedLainnyaCount,
       reservedCount,
       failedCount,
       unassessedCount,
@@ -372,7 +394,7 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
         let newStatus: Participant['selectionStatus'] = 'Tidak Lulus';
 
         if (idx < quota && (applicant.finalScore || 0) >= 60) {
-          newStatus = 'Lulus';
+          newStatus = 'Lulus KIP DIKTI';
         } else if (idx < quota + reserveQuota && (applicant.finalScore || 0) >= 50) {
           newStatus = 'Cadangan';
         } else {
@@ -406,6 +428,35 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
       updatedAt: new Date().toISOString()
     };
     onUpdateParticipant(updated);
+  };
+
+  // Batch status change for multiple selected participants
+  const handleBatchStatusChange = (status: Participant['selectionStatus']) => {
+    if (selectedIds.length === 0) return;
+    const selectedSet = new Set(selectedIds);
+    const updated = participants
+      .filter((p) => selectedSet.has(p.id))
+      .map((p) => ({
+        ...p,
+        selectionStatus: status,
+        updatedAt: new Date().toISOString()
+      }));
+    onBatchUpdateParticipants(updated);
+    setSelectedIds([]);
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === filteredParticipants.length && filteredParticipants.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredParticipants.map((p) => p.id));
+    }
+  };
+
+  const handleToggleSelectOne = (id: number) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
   };
 
   // Reset all filters
@@ -686,7 +737,9 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
             <div className="bg-emerald-500/20 backdrop-blur-xs px-3 py-2 rounded-lg border border-emerald-400/30">
               <div className="text-[10px] text-emerald-300 font-medium uppercase tracking-wider">Lulus Seleksi</div>
               <div className="text-base sm:text-lg font-black text-emerald-300">{monitoringStats.passedCount}</div>
-              <div className="text-[9px] text-emerald-400 font-semibold">{monitoringStats.fillRate}% Terisi</div>
+              <div className="text-[8.5px] text-emerald-300 font-mono tracking-tight leading-tight">
+                DIKTI:{monitoringStats.passedDiktiCount} | Asp:{monitoringStats.passedAspirasiCount} | Lain:{monitoringStats.passedLainnyaCount}
+              </div>
             </div>
             <div className="bg-white/10 backdrop-blur-xs px-3 py-2 rounded-lg border border-white/10">
               <div className="text-[10px] text-slate-300 font-medium uppercase tracking-wider">Sisa / Cadangan</div>
@@ -917,10 +970,13 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
             title="Filter Berdasarkan Status Kelulusan"
           >
             <option value="ALL">Semua Status</option>
-            <option value="Lulus">Lulus</option>
-            <option value="Cadangan">Cadangan</option>
+            <option value="ALL_PASSED">Semua Lulus (DIKTI, Aspirasi, Lainnya)</option>
+            <option value="Lulus KIP DIKTI">Lulus KIP DIKTI</option>
+            <option value="Lulus KIP Aspirasi">Lulus KIP Aspirasi</option>
             <option value="Tidak Lulus">Tidak Lulus</option>
             <option value="Belum Diproses">Belum Diproses</option>
+            <option value="Cadangan">Cadangan</option>
+            <option value="Lulus KIP Jalur Lainnya">Lulus KIP Jalur Lainnya</option>
           </select>
 
           {/* 6. Dropdown Filter Survey Lapangan Dinamis */}
@@ -1058,12 +1114,93 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
         )}
       </div>
 
+      {/* Batch Penetapan Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-blue-900 text-white p-3 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md border border-blue-700 animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="bg-yellow-400 text-blue-950 font-black px-2 py-0.5 rounded-full text-[11px] shadow-xs">
+              {selectedIds.length} Peserta Terpilih
+            </span>
+            <span className="font-semibold text-slate-100">Tetapkan Status Massal:</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => handleBatchStatusChange('Lulus KIP DIKTI')}
+              className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold cursor-pointer transition shadow-xs flex items-center gap-1"
+            >
+              <CheckCircle2 className="w-3 h-3" />
+              1. Lulus KIP DIKTI
+            </button>
+            <button
+              type="button"
+              onClick={() => handleBatchStatusChange('Lulus KIP Aspirasi')}
+              className="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold cursor-pointer transition shadow-xs flex items-center gap-1"
+            >
+              <Sparkles className="w-3 h-3 text-yellow-300" />
+              2. Lulus KIP Aspirasi
+            </button>
+            <button
+              type="button"
+              onClick={() => handleBatchStatusChange('Tidak Lulus')}
+              className="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold cursor-pointer transition shadow-xs flex items-center gap-1"
+            >
+              <XCircle className="w-3 h-3" />
+              3. Tidak Lulus
+            </button>
+            <button
+              type="button"
+              onClick={() => handleBatchStatusChange('Belum Diproses')}
+              className="px-2.5 py-1 rounded bg-slate-600 hover:bg-slate-500 text-white text-[11px] font-bold cursor-pointer transition shadow-xs flex items-center gap-1"
+            >
+              <Clock className="w-3 h-3" />
+              4. Belum Diproses
+            </button>
+            <button
+              type="button"
+              onClick={() => handleBatchStatusChange('Cadangan')}
+              className="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-bold cursor-pointer transition shadow-xs flex items-center gap-1"
+            >
+              <AlertCircle className="w-3 h-3" />
+              5. Cadangan
+            </button>
+            <button
+              type="button"
+              onClick={() => handleBatchStatusChange('Lulus KIP Jalur Lainnya')}
+              className="px-2.5 py-1 rounded bg-teal-600 hover:bg-teal-500 text-white text-[11px] font-bold cursor-pointer transition shadow-xs flex items-center gap-1"
+            >
+              <Layers className="w-3 h-3" />
+              6. Lulus KIP Jalur Lainnya
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedIds([])}
+              className="px-2 py-1 rounded text-slate-300 hover:text-white text-[11px] underline cursor-pointer ml-1"
+            >
+              Batal
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Ranking Results Table */}
       <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-600">
             <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
               <tr>
+                <th className="py-3 px-2 text-center w-8">
+                  <input
+                    type="checkbox"
+                    checked={
+                      selectedIds.length === filteredParticipants.length &&
+                      filteredParticipants.length > 0
+                    }
+                    onChange={handleToggleSelectAll}
+                    className="rounded border-slate-300 text-blue-900 focus:ring-blue-600 cursor-pointer w-3.5 h-3.5"
+                    title="Pilih / Batalkan Semua Peserta"
+                  />
+                </th>
                 <th className="py-3 px-3 text-center">Rank</th>
                 <th className="py-3 px-4">Calon Mahasiswa</th>
                 <th className="py-3 px-4">Program Studi & Fakultas</th>
@@ -1084,7 +1221,7 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
             <tbody className="divide-y divide-slate-200">
               {filteredParticipants.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-slate-400">
+                  <td colSpan={12} className="py-12 text-center text-slate-400">
                     <AlertCircle className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                     <p className="font-semibold text-slate-600 text-sm">
                       Tidak ada data peserta yang memenuhi kriteria filter.
@@ -1106,21 +1243,34 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
               ) : (
                 filteredParticipants.map((p, idx) => {
                   const isTop3 = (p.rank || 999) <= 3;
+                  const isSelected = selectedIds.includes(p.id);
                   const prodiObj =
                     prodiLookup.byId.get(p.firstChoiceProdiId) ||
                     prodiLookup.byName.get(p.firstChoiceProdiName.toLowerCase().trim());
+
+                  const isPassed = isPassedStatus(p.selectionStatus);
 
                   return (
                     <tr
                       key={`rank-row-${p.id}-${idx}`}
                       className={`hover:bg-slate-50/80 transition-colors ${
-                        p.selectionStatus === 'Lulus'
+                        isSelected
+                          ? 'bg-blue-50/70'
+                          : isPassed
                           ? 'bg-emerald-50/20'
                           : p.selectionStatus === 'Cadangan'
                           ? 'bg-amber-50/20'
                           : ''
                       }`}
                     >
+                      <td className="py-3 px-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleSelectOne(p.id)}
+                          className="rounded border-slate-300 text-blue-900 focus:ring-blue-600 cursor-pointer w-3.5 h-3.5"
+                        />
+                      </td>
                       <td className="py-3 px-3 text-center font-bold">
                         {isTop3 ? (
                           <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-yellow-400 text-blue-900 text-xs font-black shadow-xs">
@@ -1200,42 +1350,60 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
                         </span>
                       </td>
                       <td className="py-3 px-4 text-center">
+                        {p.selectionStatus === 'Lulus KIP DIKTI' && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Lulus KIP DIKTI
+                          </span>
+                        )}
+                        {p.selectionStatus === 'Lulus KIP Aspirasi' && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-900 border border-indigo-300">
+                            <Sparkles className="w-3 h-3 text-indigo-600" /> Lulus KIP Aspirasi
+                          </span>
+                        )}
+                        {p.selectionStatus === 'Lulus KIP Jalur Lainnya' && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-teal-100 text-teal-900 border border-teal-300">
+                            <Layers className="w-3 h-3 text-teal-600" /> Lulus KIP Jalur Lainnya
+                          </span>
+                        )}
                         {p.selectionStatus === 'Lulus' && (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                            <CheckCircle2 className="w-3 h-3" /> Lulus
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Lulus
                           </span>
                         )}
                         {p.selectionStatus === 'Cadangan' && (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                            <AlertCircle className="w-3 h-3" /> Cadangan
+                            <AlertCircle className="w-3 h-3 text-amber-600" /> Cadangan
                           </span>
                         )}
                         {p.selectionStatus === 'Tidak Lulus' && (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
-                            <XCircle className="w-3 h-3" /> Tidak Lulus
+                            <XCircle className="w-3 h-3 text-rose-600" /> Tidak Lulus
                           </span>
                         )}
-                        {p.selectionStatus === 'Belum Diproses' && (
+                        {(!p.selectionStatus || p.selectionStatus === 'Belum Diproses') && (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-300">
-                            Belum Diproses
+                            <Clock className="w-3 h-3 text-slate-400" /> Belum Diproses
                           </span>
                         )}
                       </td>
                       <td className="py-3 px-3 text-center">
                         <select
-                          value={p.selectionStatus}
+                          value={p.selectionStatus || 'Belum Diproses'}
                           onChange={(e) =>
                             handleSetIndividualStatus(
                               p,
                               e.target.value as Participant['selectionStatus']
                             )
                           }
-                          className="text-[11px] font-bold border border-slate-300 rounded px-1.5 py-1 bg-white text-slate-700 cursor-pointer focus:ring-1 focus:ring-blue-600"
+                          className="text-[11px] font-bold border border-slate-300 rounded px-1.5 py-1 bg-white text-slate-700 cursor-pointer focus:ring-1 focus:ring-blue-600 shadow-2xs hover:border-blue-500"
                         >
-                          <option value="Lulus">Lulus</option>
-                          <option value="Cadangan">Cadangan</option>
-                          <option value="Tidak Lulus">Tidak Lulus</option>
-                          <option value="Belum Diproses">Belum Diproses</option>
+                          <option value="Lulus KIP DIKTI">1. Lulus KIP DIKTI</option>
+                          <option value="Lulus KIP Aspirasi">2. Lulus KIP Aspirasi</option>
+                          <option value="Tidak Lulus">3. Tidak Lulus</option>
+                          <option value="Belum Diproses">4. Belum Diproses</option>
+                          <option value="Cadangan">5. Cadangan</option>
+                          <option value="Lulus KIP Jalur Lainnya">6. Lulus KIP Jalur Lainnya</option>
+                          {p.selectionStatus === 'Lulus' && <option value="Lulus">Lulus (Umum)</option>}
                         </select>
                       </td>
                     </tr>

@@ -666,10 +666,13 @@ export const ParticipantFormModal: React.FC<ParticipantFormModalProps> = ({
                       onChange={(e) => setFormData({ ...formData, selectionStatus: e.target.value as any })}
                       className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-800 font-semibold"
                     >
-                      <option value="Belum Diproses">Belum Diproses</option>
-                      <option value="Lulus">Lulus</option>
-                      <option value="Cadangan">Cadangan</option>
-                      <option value="Tidak Lulus">Tidak Lulus</option>
+                      <option value="Lulus KIP DIKTI">1. Lulus KIP DIKTI</option>
+                      <option value="Lulus KIP Aspirasi">2. Lulus KIP Aspirasi</option>
+                      <option value="Tidak Lulus">3. Tidak Lulus</option>
+                      <option value="Belum Diproses">4. Belum Diproses</option>
+                      <option value="Cadangan">5. Cadangan</option>
+                      <option value="Lulus KIP Jalur Lainnya">6. Lulus KIP Jalur Lainnya</option>
+                      {formData.selectionStatus === 'Lulus' && <option value="Lulus">Lulus (Umum)</option>}
                     </select>
                   </div>
                 </div>
