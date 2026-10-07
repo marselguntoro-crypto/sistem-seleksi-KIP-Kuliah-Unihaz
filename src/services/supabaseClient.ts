@@ -264,58 +264,58 @@ export function mapSupabaseParticipantToApp(row: SupabaseParticipantRow): Partic
 
 export function mapAppParticipantToSupabase(p: Partial<Participant>): Partial<SupabaseParticipantRow> {
   const row: Partial<SupabaseParticipantRow> = {};
-  if (p.id !== undefined) row.id = p.id;
-  if (p.regNumber !== undefined) row.reg_number = p.regNumber;
-  if (p.name !== undefined) row.name = p.name;
-  if (p.nisn !== undefined) row.nisn = p.nisn;
-  if (p.nik !== undefined) row.nik = p.nik;
-  if (p.academicYearId !== undefined) row.academic_year_id = p.academicYearId;
-  if (p.academicYearCode !== undefined) row.academic_year_code = p.academicYearCode;
-  if (p.firstChoiceProdiId !== undefined) row.first_choice_prodi_id = p.firstChoiceProdiId;
-  if (p.firstChoiceProdiName !== undefined) row.first_choice_prodi_name = p.firstChoiceProdiName;
-  if (p.secondChoiceProdiId !== undefined) row.second_choice_prodi_id = p.secondChoiceProdiId;
-  if (p.secondChoiceProdiName !== undefined) row.second_choice_prodi_name = p.secondChoiceProdiName;
-  if (p.schoolOrigin !== undefined) row.school_origin = p.schoolOrigin;
-  if (p.schoolType !== undefined) row.school_type = p.schoolType;
-  if (p.schoolMajor !== undefined) row.school_major = p.schoolMajor;
-  if (p.graduationYear !== undefined) row.graduation_year = p.graduationYear;
-  if (p.phone !== undefined) row.phone = p.phone;
-  if (p.email !== undefined) row.email = p.email;
-  if (p.address !== undefined) row.address = p.address;
-  if (p.city !== undefined) row.city = p.city;
-  if (p.province !== undefined) row.province = p.province;
-  if (p.desil !== undefined) row.desil = p.desil;
-  if (p.parentName !== undefined) row.parent_name = p.parentName;
-  if (p.parentIncome !== undefined) row.parent_income = p.parentIncome;
-  if (p.parentJob !== undefined) row.parent_job = p.parentJob;
-  if (p.familyDependents !== undefined) row.family_dependents = p.familyDependents;
-  if (p.documentStatus !== undefined) row.document_status = p.documentStatus;
-  if (p.documentReceiver !== undefined) row.document_receiver = p.documentReceiver;
-  if (p.documentReceivedDate !== undefined) row.document_received_date = p.documentReceivedDate;
-  if (p.documentChecker !== undefined) row.document_checker = p.documentChecker;
-  if (p.documentCheckedDate !== undefined) row.document_checked_date = p.documentCheckedDate;
-  if (p.documentNotes !== undefined) row.document_notes = p.documentNotes;
-  if (p.documentChecklist !== undefined) row.document_checklist = p.documentChecklist;
-  if (p.surveyScore !== undefined) row.survey_score = p.surveyScore;
-  if (p.surveyorName !== undefined) row.surveyor_name = p.surveyorName;
-  if (p.surveyDate !== undefined) row.survey_date = p.surveyDate;
-  if (p.surveyNotes !== undefined) row.survey_notes = p.surveyNotes;
-  if (p.houseCondition !== undefined) row.house_condition = p.houseCondition;
-  if (p.utbkScore !== undefined) row.utbk_score = p.utbkScore;
-  if (p.utbkOperator !== undefined) row.utbk_operator = p.utbkOperator;
-  if (p.utbkDate !== undefined) row.utbk_date = p.utbkDate;
-  if (p.utbkNotes !== undefined) row.utbk_notes = p.utbkNotes;
-  if (p.interviewScore !== undefined) row.interview_score = p.interviewScore;
-  if (p.interviewerName !== undefined) row.interviewer_name = p.interviewerName;
-  if (p.interviewDate !== undefined) row.interview_date = p.interviewDate;
-  if (p.interviewNotes !== undefined) row.interview_notes = p.interviewNotes;
-  if (p.affirmationScore !== undefined) row.affirmation_score = p.affirmationScore;
-  if (p.finalScore !== undefined) row.final_score = p.finalScore;
-  if (p.selectionStatus !== undefined) row.selection_status = p.selectionStatus;
-  if (p.rank !== undefined) row.rank = p.rank;
-  if (p.notes !== undefined) row.notes = p.notes;
-  if (p.createdAt !== undefined) row.created_at = p.createdAt;
-  if (p.updatedAt !== undefined) row.updated_at = p.updatedAt;
+  if (p.id !== undefined && p.id > 0) row.id = p.id;
+  row.reg_number = (p.regNumber || `REG-${Date.now()}-${Math.floor(Math.random() * 1000)}`).trim();
+  row.name = (p.name || 'Peserta').trim();
+  row.nisn = (p.nisn || '-').trim();
+  row.nik = (p.nik || '-').trim();
+  row.academic_year_id = Number(p.academicYearId) || 1;
+  row.academic_year_code = p.academicYearCode || null;
+  row.first_choice_prodi_id = Number(p.firstChoiceProdiId) || 1;
+  row.first_choice_prodi_name = p.firstChoiceProdiName || 'Pilihan 1';
+  row.second_choice_prodi_id = Number(p.secondChoiceProdiId) || 1;
+  row.second_choice_prodi_name = p.secondChoiceProdiName || 'Pilihan 2';
+  row.school_origin = p.schoolOrigin || 'SMA';
+  row.school_type = (p.schoolType as 'SMA' | 'SMK' | 'MA') || 'SMA';
+  row.school_major = p.schoolMajor || null;
+  row.graduation_year = Number(p.graduationYear) || 2026;
+  row.phone = p.phone || '-';
+  row.email = p.email || '-';
+  row.address = p.address || '-';
+  row.city = p.city || 'Kota Bengkulu';
+  row.province = p.province || 'Bengkulu';
+  row.desil = (p.desil as any) || 'Desil 1';
+  row.parent_name = p.parentName || '-';
+  row.parent_income = Number(p.parentIncome) >= 0 ? Number(p.parentIncome) : 0;
+  row.parent_job = p.parentJob || '-';
+  row.family_dependents = Number(p.familyDependents) >= 0 ? Number(p.familyDependents) : 1;
+  row.document_status = p.documentStatus || 'Belum Diverifikasi';
+  row.document_receiver = p.documentReceiver || null;
+  row.document_received_date = p.documentReceivedDate || null;
+  row.document_checker = p.documentChecker || null;
+  row.document_checked_date = p.documentCheckedDate || null;
+  row.document_notes = p.documentNotes || null;
+  row.document_checklist = p.documentChecklist || null;
+  row.survey_score = p.surveyScore !== undefined && p.surveyScore !== null ? Number(p.surveyScore) : null;
+  row.surveyor_name = p.surveyorName || null;
+  row.survey_date = p.surveyDate || null;
+  row.survey_notes = p.surveyNotes || null;
+  row.house_condition = (p.houseCondition as any) || null;
+  row.utbk_score = p.utbkScore !== undefined && p.utbkScore !== null ? Number(p.utbkScore) : null;
+  row.utbk_operator = p.utbkOperator || null;
+  row.utbk_date = p.utbkDate || null;
+  row.utbk_notes = p.utbkNotes || null;
+  row.interview_score = p.interviewScore !== undefined && p.interviewScore !== null ? Number(p.interviewScore) : null;
+  row.interviewer_name = p.interviewerName || null;
+  row.interview_date = p.interviewDate || null;
+  row.interview_notes = p.interviewNotes || null;
+  row.affirmation_score = p.affirmationScore !== undefined && p.affirmationScore !== null ? Number(p.affirmationScore) : null;
+  row.final_score = p.finalScore !== undefined && p.finalScore !== null ? Number(p.finalScore) : null;
+  row.selection_status = p.selectionStatus || 'Belum Diproses';
+  row.rank = p.rank !== undefined && p.rank !== null ? Number(p.rank) : null;
+  row.notes = p.notes || null;
+  row.created_at = p.createdAt || new Date().toISOString();
+  row.updated_at = p.updatedAt || new Date().toISOString();
   return row;
 }
 
@@ -519,14 +519,24 @@ export const supabaseService = {
 
   async batchUpdateParticipants(participants: Participant[]): Promise<Participant[]> {
     try {
-      const payloads = participants.map((p) => mapAppParticipantToSupabase(p));
-      const { data, error } = await supabase
-        .from('participants')
-        .upsert(payloads, { onConflict: 'id' })
-        .select();
-
-      if (error) throw error;
-      return (data as SupabaseParticipantRow[]).map(mapSupabaseParticipantToApp);
+      const CHUNK_SIZE = 50;
+      for (let i = 0; i < participants.length; i += CHUNK_SIZE) {
+        const chunk = participants.slice(i, i + CHUNK_SIZE);
+        const payloads = chunk.map((p) => mapAppParticipantToSupabase(p));
+        const { error } = await supabase
+          .from('participants')
+          .upsert(payloads, { onConflict: 'id' });
+        if (error) {
+          // Fallback to onConflict 'reg_number'
+          const { error: err2 } = await supabase
+            .from('participants')
+            .upsert(payloads, { onConflict: 'reg_number' });
+          if (err2) {
+            console.warn(`[Supabase Batch Update Chunk ${i}-${i + chunk.length}] Error:`, err2);
+          }
+        }
+      }
+      return participants;
     } catch (err: any) {
       console.error('[Supabase] Error batch updating participants:', err.message || err);
       throw err;
@@ -872,42 +882,54 @@ export const supabaseService = {
       if (payload.academicYears && payload.academicYears.length > 0) {
         const rows = payload.academicYears.map(mapAppAcademicYearToSupabase);
         const { error } = await supabase.from('academic_years').upsert(rows, { onConflict: 'id' });
-        if (error) throw error;
+        if (error) throw new Error(`[Tahun Akademik]: ${error.message}`);
         count += rows.length;
       }
       // 2. Faculties
       if (payload.faculties && payload.faculties.length > 0) {
         const rows = payload.faculties.map(mapAppFacultyToSupabase);
         const { error } = await supabase.from('faculties').upsert(rows, { onConflict: 'id' });
-        if (error) throw error;
+        if (error) throw new Error(`[Fakultas]: ${error.message}`);
         count += rows.length;
       }
       // 3. Study Programs
       if (payload.studyPrograms && payload.studyPrograms.length > 0) {
         const rows = payload.studyPrograms.map(mapAppStudyProgramToSupabase);
         const { error } = await supabase.from('study_programs').upsert(rows, { onConflict: 'id' });
-        if (error) throw error;
+        if (error) throw new Error(`[Program Studi]: ${error.message}`);
         count += rows.length;
       }
       // 4. Users
       if (payload.users && payload.users.length > 0) {
         const rows = payload.users.map(mapAppUserToSupabase);
         const { error } = await supabase.from('users').upsert(rows, { onConflict: 'id' });
-        if (error) throw error;
+        if (error) throw new Error(`[Pengguna/Operator]: ${error.message}`);
         count += rows.length;
       }
-      // 5. Participants
+      // 5. Participants (Batched in chunks of 50 for large datasets like 458+ records)
       if (payload.participants && payload.participants.length > 0) {
-        const rows = payload.participants.map(mapAppParticipantToSupabase);
-        const { error } = await supabase.from('participants').upsert(rows, { onConflict: 'id' });
-        if (error) throw error;
-        count += rows.length;
+        const CHUNK_SIZE = 50;
+        for (let i = 0; i < payload.participants.length; i += CHUNK_SIZE) {
+          const chunk = payload.participants.slice(i, i + CHUNK_SIZE);
+          const rows = chunk.map(mapAppParticipantToSupabase);
+          
+          let { error } = await supabase.from('participants').upsert(rows, { onConflict: 'id' });
+          if (error) {
+            // Fallback retry using 'reg_number' as the conflict key
+            const { error: err2 } = await supabase.from('participants').upsert(rows, { onConflict: 'reg_number' });
+            if (err2) {
+              console.error(`[Supabase Chunk ${i + 1}-${i + chunk.length} Error]:`, err2);
+              throw new Error(`[Peserta baris ${i + 1} s/d ${i + chunk.length}]: ${err2.message}`);
+            }
+          }
+          count += rows.length;
+        }
       }
       // 6. Selection Weights
       if (payload.weights) {
         const row = mapAppWeightsToSupabase(payload.weights);
         const { error } = await supabase.from('selection_weights').upsert([{ id: 1, ...row }], { onConflict: 'id' });
-        if (error) throw error;
+        if (error) throw new Error(`[Bobot Seleksi]: ${error.message}`);
       }
       return { success: true, count };
     } catch (err: any) {

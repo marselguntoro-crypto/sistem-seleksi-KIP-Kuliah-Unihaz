@@ -119,7 +119,7 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
         weights,
       });
       if (res.success) {
-        setSyncFeedback(`✅ Berhasil mengirim ${res.count} data ke tabel Supabase!`);
+        setSyncFeedback(`✅ Berhasil mengirim ${res.count} data (termasuk ${participants.length} peserta) ke tabel Supabase!`);
         runTestSupabase();
       } else {
         setSyncFeedback(`⚠️ Gagal: ${res.error || 'Terjadi kesalahan saat sinkronisasi'}`);
@@ -471,11 +471,11 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
               type="button"
               onClick={handleSyncToSupabase}
               disabled={isSyncingSupabase || !supabaseTest.isConfigured}
-              title="Kirim seluruh data peserta dan master data yang ada saat ini langsung ke tabel Supabase"
+              title={`Kirim seluruh ${participants.length} data peserta dan master data yang ada saat ini langsung ke tabel Supabase`}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-900 hover:bg-blue-800 text-white transition disabled:opacity-50 cursor-pointer shadow-2xs"
             >
               <UploadCloud className={`w-3.5 h-3.5 ${isSyncingSupabase ? 'animate-bounce' : ''}`} />
-              <span>{isSyncingSupabase ? 'Mengirim Data...' : 'Sinkronkan Data ke Supabase'}</span>
+              <span>{isSyncingSupabase ? 'Mengirim Data...' : `Sinkronkan Data (${participants.length} Peserta) ke Supabase`}</span>
             </button>
             <button
               type="button"
