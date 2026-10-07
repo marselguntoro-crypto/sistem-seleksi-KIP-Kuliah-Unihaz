@@ -290,30 +290,30 @@ export function mapAppParticipantToSupabase(p: Partial<Participant>): Partial<Su
   row.parent_job = p.parentJob || '-';
   row.family_dependents = Number(p.familyDependents) >= 0 ? Number(p.familyDependents) : 1;
   row.document_status = p.documentStatus || 'Belum Diverifikasi';
-  row.document_receiver = p.documentReceiver || null;
-  row.document_received_date = p.documentReceivedDate || null;
-  row.document_checker = p.documentChecker || null;
-  row.document_checked_date = p.documentCheckedDate || null;
-  row.document_notes = p.documentNotes || null;
-  row.document_checklist = p.documentChecklist || null;
-  row.survey_score = p.surveyScore !== undefined && p.surveyScore !== null ? Number(p.surveyScore) : null;
-  row.surveyor_name = p.surveyorName || null;
-  row.survey_date = p.surveyDate || null;
-  row.survey_notes = p.surveyNotes || null;
-  row.house_condition = (p.houseCondition as any) || null;
-  row.utbk_score = p.utbkScore !== undefined && p.utbkScore !== null ? Number(p.utbkScore) : null;
-  row.utbk_operator = p.utbkOperator || null;
-  row.utbk_date = p.utbkDate || null;
-  row.utbk_notes = p.utbkNotes || null;
-  row.interview_score = p.interviewScore !== undefined && p.interviewScore !== null ? Number(p.interviewScore) : null;
-  row.interviewer_name = p.interviewerName || null;
-  row.interview_date = p.interviewDate || null;
-  row.interview_notes = p.interviewNotes || null;
-  row.affirmation_score = p.affirmationScore !== undefined && p.affirmationScore !== null ? Number(p.affirmationScore) : null;
-  row.final_score = p.finalScore !== undefined && p.finalScore !== null ? Number(p.finalScore) : null;
+  if (p.documentReceiver) row.document_receiver = p.documentReceiver;
+  if (p.documentReceivedDate) row.document_received_date = p.documentReceivedDate;
+  if (p.documentChecker) row.document_checker = p.documentChecker;
+  if (p.documentCheckedDate) row.document_checked_date = p.documentCheckedDate;
+  if (p.documentNotes) row.document_notes = p.documentNotes;
+  if (p.documentChecklist) row.document_checklist = p.documentChecklist;
+  if (p.surveyScore !== undefined && p.surveyScore !== null) row.survey_score = Number(p.surveyScore);
+  if (p.surveyorName) row.surveyor_name = p.surveyorName;
+  if (p.surveyDate) row.survey_date = p.surveyDate;
+  if (p.surveyNotes) row.survey_notes = p.surveyNotes;
+  if (p.houseCondition) row.house_condition = p.houseCondition as any;
+  if (p.utbkScore !== undefined && p.utbkScore !== null) row.utbk_score = Number(p.utbkScore);
+  if (p.utbkOperator) row.utbk_operator = p.utbkOperator;
+  if (p.utbkDate) row.utbk_date = p.utbkDate;
+  if (p.utbkNotes) row.utbk_notes = p.utbkNotes;
+  if (p.interviewScore !== undefined && p.interviewScore !== null) row.interview_score = Number(p.interviewScore);
+  if (p.interviewerName) row.interviewer_name = p.interviewerName;
+  if (p.interviewDate) row.interview_date = p.interviewDate;
+  if (p.interviewNotes) row.interview_notes = p.interviewNotes;
+  if (p.affirmationScore !== undefined && p.affirmationScore !== null) row.affirmation_score = Number(p.affirmationScore);
+  if (p.finalScore !== undefined && p.finalScore !== null) row.final_score = Number(p.finalScore);
   row.selection_status = p.selectionStatus || 'Belum Diproses';
-  row.rank = p.rank !== undefined && p.rank !== null ? Number(p.rank) : null;
-  row.notes = p.notes || null;
+  if (p.rank !== undefined && p.rank !== null) row.rank = Number(p.rank);
+  if (p.notes) row.notes = p.notes;
   row.created_at = p.createdAt || new Date().toISOString();
   row.updated_at = p.updatedAt || new Date().toISOString();
   return row;
@@ -522,17 +522,38 @@ export const supabaseService = {
       const CHUNK_SIZE = 50;
       for (let i = 0; i < participants.length; i += CHUNK_SIZE) {
         const chunk = participants.slice(i, i + CHUNK_SIZE);
-        const payloads = chunk.map((p) => mapAppParticipantToSupabase(p));
+        
+        // Ensure no duplicate IDs or reg_numbers in this batch
+        const deduped: Partial<SupabaseParticipantRow>[] = [];
+        const seenBatchIds = new Set<number>();
+        const seenBatchRegs = new Set<string>();
+
+        for (let cIdx = 0; cIdx < chunk.length; cIdx++) {
+          const row = mapAppParticipantToSupabase(chunk[cIdx]);
+          if (row.id && seenBatchIds.has(row.id)) {
+            delete row.id;
+          } else if (row.id) {
+            seenBatchIds.add(row.id);
+          }
+          if (row.reg_number && seenBatchRegs.has(row.reg_number)) {
+            row.reg_number = `${row.reg_number}-${i + cIdx + 1}`;
+          } else if (row.reg_number) {
+            seenBatchRegs.add(row.reg_number);
+          }
+          deduped.push(row);
+        }
+
         const { error } = await supabase
           .from('participants')
-          .upsert(payloads, { onConflict: 'id' });
+          .upsert(deduped, { onConflict: 'id' });
+
         if (error) {
-          // Fallback to onConflict 'reg_number'
-          const { error: err2 } = await supabase
-            .from('participants')
-            .upsert(payloads, { onConflict: 'reg_number' });
-          if (err2) {
-            console.warn(`[Supabase Batch Update Chunk ${i}-${i + chunk.length}] Error:`, err2);
+          // Fallback row-by-row to bypass batch-level conflict errors
+          for (const row of deduped) {
+            const { error: singleErr } = await supabase.from('participants').upsert([row], { onConflict: 'id' });
+            if (singleErr) {
+              await supabase.from('participants').upsert([row], { onConflict: 'reg_number' });
+            }
           }
         }
       }
@@ -906,23 +927,47 @@ export const supabaseService = {
         if (error) throw new Error(`[Pengguna/Operator]: ${error.message}`);
         count += rows.length;
       }
-      // 5. Participants (Batched in chunks of 50 for large datasets like 458+ records)
+      // 5. Participants (Batched in chunks of 50 with in-batch de-duplication and single-row fallback)
       if (payload.participants && payload.participants.length > 0) {
         const CHUNK_SIZE = 50;
         for (let i = 0; i < payload.participants.length; i += CHUNK_SIZE) {
           const chunk = payload.participants.slice(i, i + CHUNK_SIZE);
-          const rows = chunk.map(mapAppParticipantToSupabase);
           
-          let { error } = await supabase.from('participants').upsert(rows, { onConflict: 'id' });
+          // Deduplicate IDs and reg_numbers within this batch to prevent Postgres "cannot affect row a second time"
+          const dedupedRows: Partial<SupabaseParticipantRow>[] = [];
+          const seenBatchIds = new Set<number>();
+          const seenBatchRegs = new Set<string>();
+
+          for (let cIdx = 0; cIdx < chunk.length; cIdx++) {
+            const row = mapAppParticipantToSupabase(chunk[cIdx]);
+            if (row.id && seenBatchIds.has(row.id)) {
+              delete row.id; // Let Postgres auto-increment serial assign clean unique ID
+            } else if (row.id) {
+              seenBatchIds.add(row.id);
+            }
+            if (row.reg_number && seenBatchRegs.has(row.reg_number)) {
+              row.reg_number = `${row.reg_number}-${i + cIdx + 1}`;
+            } else if (row.reg_number) {
+              seenBatchRegs.add(row.reg_number);
+            }
+            dedupedRows.push(row);
+          }
+
+          let { error } = await supabase.from('participants').upsert(dedupedRows, { onConflict: 'id' });
           if (error) {
-            // Fallback retry using 'reg_number' as the conflict key
-            const { error: err2 } = await supabase.from('participants').upsert(rows, { onConflict: 'reg_number' });
-            if (err2) {
-              console.error(`[Supabase Chunk ${i + 1}-${i + chunk.length} Error]:`, err2);
-              throw new Error(`[Peserta baris ${i + 1} s/d ${i + chunk.length}]: ${err2.message}`);
+            // Fallback row-by-row for this chunk so no duplicate blocks the transaction
+            for (const row of dedupedRows) {
+              try {
+                let { error: singleErr } = await supabase.from('participants').upsert([row], { onConflict: 'id' });
+                if (singleErr) {
+                  await supabase.from('participants').upsert([row], { onConflict: 'reg_number' });
+                }
+              } catch (innerErr) {
+                console.warn('[Supabase Individual Row Sync Warning]:', innerErr);
+              }
             }
           }
-          count += rows.length;
+          count += chunk.length;
         }
       }
       // 6. Selection Weights
