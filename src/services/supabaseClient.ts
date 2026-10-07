@@ -23,6 +23,54 @@ export const isSupabaseConfigured = Boolean(
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+export async function testSupabaseConnection(): Promise<{
+  success: boolean;
+  message: string;
+  latencyMs?: number;
+  url: string;
+  isConfigured: boolean;
+}> {
+  const url = import.meta.env.VITE_SUPABASE_URL || '';
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+  if (!url || !anonKey || url.includes('mock-unihaz')) {
+    return {
+      success: false,
+      message: 'Variabel VITE_SUPABASE_URL atau VITE_SUPABASE_ANON_KEY belum diisi.',
+      url: url || '(belum diisi)',
+      isConfigured: false
+    };
+  }
+
+  const start = performance.now();
+  try {
+    const { error } = await supabase.from('users').select('id').limit(1);
+    const latencyMs = Math.round(performance.now() - start);
+    if (error) {
+      return {
+        success: false,
+        message: error.message,
+        latencyMs,
+        url,
+        isConfigured: true
+      };
+    }
+    return {
+      success: true,
+      message: 'Koneksi ke Supabase aktif dan berhasil merespons query!',
+      latencyMs,
+      url,
+      isConfigured: true
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err?.message || 'Gagal terhubung ke host Supabase',
+      url,
+      isConfigured: true
+    };
+  }
+}
+
 // ==========================================
 // 2. Supabase Database Interfaces (snake_case)
 // ==========================================
@@ -804,6 +852,67 @@ export const supabaseService = {
     } catch (err: any) {
       console.error(`[Supabase] Error deleting user ${id}:`, err.message || err);
       throw err;
+    }
+  },
+
+  // ----------------------------------------
+  // BULK SYNC ALL TO SUPABASE
+  // ----------------------------------------
+  async syncAllToSupabase(payload: {
+    participants?: Participant[];
+    academicYears?: AcademicYear[];
+    faculties?: Faculty[];
+    studyPrograms?: StudyProgram[];
+    users?: User[];
+    weights?: SelectionWeights;
+  }): Promise<{ success: boolean; count: number; error?: string }> {
+    try {
+      let count = 0;
+      // 1. Academic Years
+      if (payload.academicYears && payload.academicYears.length > 0) {
+        const rows = payload.academicYears.map(mapAppAcademicYearToSupabase);
+        const { error } = await supabase.from('academic_years').upsert(rows, { onConflict: 'id' });
+        if (error) throw error;
+        count += rows.length;
+      }
+      // 2. Faculties
+      if (payload.faculties && payload.faculties.length > 0) {
+        const rows = payload.faculties.map(mapAppFacultyToSupabase);
+        const { error } = await supabase.from('faculties').upsert(rows, { onConflict: 'id' });
+        if (error) throw error;
+        count += rows.length;
+      }
+      // 3. Study Programs
+      if (payload.studyPrograms && payload.studyPrograms.length > 0) {
+        const rows = payload.studyPrograms.map(mapAppStudyProgramToSupabase);
+        const { error } = await supabase.from('study_programs').upsert(rows, { onConflict: 'id' });
+        if (error) throw error;
+        count += rows.length;
+      }
+      // 4. Users
+      if (payload.users && payload.users.length > 0) {
+        const rows = payload.users.map(mapAppUserToSupabase);
+        const { error } = await supabase.from('users').upsert(rows, { onConflict: 'id' });
+        if (error) throw error;
+        count += rows.length;
+      }
+      // 5. Participants
+      if (payload.participants && payload.participants.length > 0) {
+        const rows = payload.participants.map(mapAppParticipantToSupabase);
+        const { error } = await supabase.from('participants').upsert(rows, { onConflict: 'id' });
+        if (error) throw error;
+        count += rows.length;
+      }
+      // 6. Selection Weights
+      if (payload.weights) {
+        const row = mapAppWeightsToSupabase(payload.weights);
+        const { error } = await supabase.from('selection_weights').upsert([{ id: 1, ...row }], { onConflict: 'id' });
+        if (error) throw error;
+      }
+      return { success: true, count };
+    } catch (err: any) {
+      console.error('[Supabase] syncAllToSupabase error:', err);
+      return { success: false, count: 0, error: err?.message || 'Gagal sinkronisasi ke Supabase' };
     }
   },
 };

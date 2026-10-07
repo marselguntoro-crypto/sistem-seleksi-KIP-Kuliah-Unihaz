@@ -41,6 +41,7 @@ import {
   fsBatchDeleteParticipants,
   clearAllDummyParticipants
 } from '../services/firestoreSync';
+import { supabaseService, isSupabaseConfigured } from '../services/supabaseClient';
 
 // Flag to check if we can reach the local Express server
 let serverReachable: boolean | null = null;
@@ -64,6 +65,14 @@ export const api = {
 
   // Users
   async getUsers(): Promise<User[]> {
+    if (isSupabaseConfigured) {
+      try {
+        const spUsers = await supabaseService.getUsers();
+        if (spUsers && spUsers.length > 0) return spUsers;
+      } catch (err) {
+        console.warn('[Supabase] getUsers error:', err);
+      }
+    }
     if (await isServerAvailable()) {
       try {
         const res = await fetch('/api/users');
@@ -75,13 +84,21 @@ export const api = {
     return fsGetUsers();
   },
   async createUser(data: Omit<User, 'id'>): Promise<User> {
-    const fsPromise = fsCreateUser(data);
+    let createdItem: User | null = null;
+    if (isSupabaseConfigured) {
+      try {
+        createdItem = await supabaseService.insertUser(data);
+      } catch (err) {
+        console.warn('[Supabase] createUser error:', err);
+      }
+    }
+    const fsPromise = fsCreateUser(createdItem || data);
     if (await isServerAvailable()) {
       try {
         const res = await fetch('/api/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
+          body: JSON.stringify(createdItem || data),
         });
         if (res.ok) {
           const resData = await res.json();
@@ -90,9 +107,13 @@ export const api = {
         }
       } catch {}
     }
+    if (createdItem) return createdItem;
     return fsPromise;
   },
   async updateUser(user: User): Promise<User> {
+    if (isSupabaseConfigured) {
+      supabaseService.updateUser(user).catch(err => console.warn('[Supabase] updateUser error:', err));
+    }
     const fsPromise = fsUpdateUser(user);
     if (await isServerAvailable()) {
       try {
@@ -106,6 +127,9 @@ export const api = {
     return fsPromise;
   },
   async deleteUser(id: number): Promise<void> {
+    if (isSupabaseConfigured) {
+      supabaseService.deleteUser(id).catch(err => console.warn('[Supabase] deleteUser error:', err));
+    }
     await fsDeleteUser(id);
     if (await isServerAvailable()) {
       fetch(`/api/users/${id}`, { method: 'DELETE' }).catch(() => {});
@@ -114,6 +138,14 @@ export const api = {
 
   // Academic Years
   async getAcademicYears(): Promise<AcademicYear[]> {
+    if (isSupabaseConfigured) {
+      try {
+        const spYears = await supabaseService.getAcademicYears();
+        if (spYears && spYears.length > 0) return spYears;
+      } catch (err) {
+        console.warn('[Supabase] getAcademicYears error:', err);
+      }
+    }
     if (await isServerAvailable()) {
       try {
         const res = await fetch('/api/academic-years');
@@ -123,17 +155,29 @@ export const api = {
     return fsGetAcademicYears();
   },
   async createAcademicYear(data: Omit<AcademicYear, 'id'>): Promise<AcademicYear> {
-    const fsPromise = fsCreateAcademicYear(data);
+    let createdItem: AcademicYear | null = null;
+    if (isSupabaseConfigured) {
+      try {
+        createdItem = await supabaseService.insertAcademicYear(data);
+      } catch (err) {
+        console.warn('[Supabase] createAcademicYear error:', err);
+      }
+    }
+    const fsPromise = fsCreateAcademicYear(createdItem || data);
     if (await isServerAvailable()) {
       fetch('/api/academic-years', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(createdItem || data),
       }).catch(() => {});
     }
+    if (createdItem) return createdItem;
     return fsPromise;
   },
   async updateAcademicYear(data: AcademicYear): Promise<AcademicYear> {
+    if (isSupabaseConfigured) {
+      supabaseService.updateAcademicYear(data).catch(err => console.warn('[Supabase] updateAcademicYear error:', err));
+    }
     const fsPromise = fsUpdateAcademicYear(data);
     if (await isServerAvailable()) {
       fetch(`/api/academic-years/${data.id}`, {
@@ -145,6 +189,9 @@ export const api = {
     return fsPromise;
   },
   async deleteAcademicYear(id: number): Promise<void> {
+    if (isSupabaseConfigured) {
+      supabaseService.deleteAcademicYear(id).catch(err => console.warn('[Supabase] deleteAcademicYear error:', err));
+    }
     await fsDeleteAcademicYear(id);
     if (await isServerAvailable()) {
       fetch(`/api/academic-years/${id}`, { method: 'DELETE' }).catch(() => {});
@@ -153,6 +200,14 @@ export const api = {
 
   // Faculties
   async getFaculties(): Promise<Faculty[]> {
+    if (isSupabaseConfigured) {
+      try {
+        const spFaculties = await supabaseService.getFaculties();
+        if (spFaculties && spFaculties.length > 0) return spFaculties;
+      } catch (err) {
+        console.warn('[Supabase] getFaculties error:', err);
+      }
+    }
     if (await isServerAvailable()) {
       try {
         const res = await fetch('/api/faculties');
@@ -162,17 +217,29 @@ export const api = {
     return fsGetFaculties();
   },
   async createFaculty(data: Omit<Faculty, 'id'>): Promise<Faculty> {
-    const fsPromise = fsCreateFaculty(data);
+    let createdItem: Faculty | null = null;
+    if (isSupabaseConfigured) {
+      try {
+        createdItem = await supabaseService.insertFaculty(data);
+      } catch (err) {
+        console.warn('[Supabase] createFaculty error:', err);
+      }
+    }
+    const fsPromise = fsCreateFaculty(createdItem || data);
     if (await isServerAvailable()) {
       fetch('/api/faculties', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(createdItem || data),
       }).catch(() => {});
     }
+    if (createdItem) return createdItem;
     return fsPromise;
   },
   async updateFaculty(data: Faculty): Promise<Faculty> {
+    if (isSupabaseConfigured) {
+      supabaseService.updateFaculty(data).catch(err => console.warn('[Supabase] updateFaculty error:', err));
+    }
     const fsPromise = fsUpdateFaculty(data);
     if (await isServerAvailable()) {
       fetch(`/api/faculties/${data.id}`, {
@@ -184,6 +251,9 @@ export const api = {
     return fsPromise;
   },
   async deleteFaculty(id: number): Promise<void> {
+    if (isSupabaseConfigured) {
+      supabaseService.deleteFaculty(id).catch(err => console.warn('[Supabase] deleteFaculty error:', err));
+    }
     await fsDeleteFaculty(id);
     if (await isServerAvailable()) {
       fetch(`/api/faculties/${id}`, { method: 'DELETE' }).catch(() => {});
@@ -192,6 +262,14 @@ export const api = {
 
   // Study Programs
   async getStudyPrograms(): Promise<StudyProgram[]> {
+    if (isSupabaseConfigured) {
+      try {
+        const spPrograms = await supabaseService.getStudyPrograms();
+        if (spPrograms && spPrograms.length > 0) return spPrograms;
+      } catch (err) {
+        console.warn('[Supabase] getStudyPrograms error:', err);
+      }
+    }
     if (await isServerAvailable()) {
       try {
         const res = await fetch('/api/study-programs');
@@ -201,17 +279,29 @@ export const api = {
     return fsGetStudyPrograms();
   },
   async createStudyProgram(data: Omit<StudyProgram, 'id'>): Promise<StudyProgram> {
-    const fsPromise = fsCreateStudyProgram(data);
+    let createdItem: StudyProgram | null = null;
+    if (isSupabaseConfigured) {
+      try {
+        createdItem = await supabaseService.insertStudyProgram(data);
+      } catch (err) {
+        console.warn('[Supabase] createStudyProgram error:', err);
+      }
+    }
+    const fsPromise = fsCreateStudyProgram(createdItem || data);
     if (await isServerAvailable()) {
       fetch('/api/study-programs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(createdItem || data),
       }).catch(() => {});
     }
+    if (createdItem) return createdItem;
     return fsPromise;
   },
   async updateStudyProgram(data: StudyProgram): Promise<StudyProgram> {
+    if (isSupabaseConfigured) {
+      supabaseService.updateStudyProgram(data).catch(err => console.warn('[Supabase] updateStudyProgram error:', err));
+    }
     const fsPromise = fsUpdateStudyProgram(data);
     if (await isServerAvailable()) {
       fetch(`/api/study-programs/${data.id}`, {
@@ -223,6 +313,9 @@ export const api = {
     return fsPromise;
   },
   async deleteStudyProgram(id: number): Promise<void> {
+    if (isSupabaseConfigured) {
+      supabaseService.deleteStudyProgram(id).catch(err => console.warn('[Supabase] deleteStudyProgram error:', err));
+    }
     await fsDeleteStudyProgram(id);
     if (await isServerAvailable()) {
       fetch(`/api/study-programs/${id}`, { method: 'DELETE' }).catch(() => {});
@@ -231,6 +324,14 @@ export const api = {
 
   // Participants
   async getParticipants(): Promise<Participant[]> {
+    if (isSupabaseConfigured) {
+      try {
+        const spList = await supabaseService.getParticipants();
+        if (spList && spList.length > 0) return spList;
+      } catch (err) {
+        console.warn('[Supabase] getParticipants error:', err);
+      }
+    }
     if (await isServerAvailable()) {
       try {
         const res = await fetch('/api/participants');
@@ -240,17 +341,30 @@ export const api = {
     return fsGetParticipants();
   },
   async createParticipant(data: Omit<Participant, 'id'>): Promise<Participant> {
-    const fsPromise = fsCreateParticipant(data);
+    let createdItem: Participant | null = null;
+    if (isSupabaseConfigured) {
+      try {
+        createdItem = await supabaseService.insertParticipant(data);
+        console.log('[Supabase] Berhasil menyimpan peserta baru ke tabel participants:', createdItem);
+      } catch (err) {
+        console.warn('[Supabase] Gagal menyimpan peserta ke Supabase:', err);
+      }
+    }
+    const fsPromise = fsCreateParticipant(createdItem || data);
     if (await isServerAvailable()) {
       fetch('/api/participants', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(createdItem || data),
       }).catch(() => {});
     }
+    if (createdItem) return createdItem;
     return fsPromise;
   },
   async updateParticipant(data: Participant): Promise<Participant> {
+    if (isSupabaseConfigured) {
+      supabaseService.updateParticipant(data).catch((err) => console.warn('[Supabase] updateParticipant error:', err));
+    }
     const fsPromise = fsUpdateParticipant(data);
     if (await isServerAvailable()) {
       fetch(`/api/participants/${data.id}`, {
@@ -262,6 +376,9 @@ export const api = {
     return fsPromise;
   },
   async batchUpdateParticipants(participants: Participant[]): Promise<Participant[]> {
+    if (isSupabaseConfigured) {
+      supabaseService.batchUpdateParticipants(participants).catch((err) => console.warn('[Supabase] batchUpdate error:', err));
+    }
     const fsPromise = fsBatchUpdateParticipants(participants);
     if (await isServerAvailable()) {
       fetch('/api/participants/batch', {
@@ -273,6 +390,9 @@ export const api = {
     return fsPromise;
   },
   async deleteParticipant(id: number): Promise<void> {
+    if (isSupabaseConfigured) {
+      supabaseService.deleteParticipant(id).catch((err) => console.warn('[Supabase] deleteParticipant error:', err));
+    }
     await fsDeleteParticipant(id);
     if (await isServerAvailable()) {
       fetch(`/api/participants/${id}`, { method: 'DELETE' }).catch(() => {});
@@ -280,6 +400,11 @@ export const api = {
   },
   async batchDeleteParticipants(ids: number[]): Promise<void> {
     if (!ids || ids.length === 0) return;
+    if (isSupabaseConfigured) {
+      ids.forEach((id) => {
+        supabaseService.deleteParticipant(id).catch(() => {});
+      });
+    }
     try {
       await fsBatchDeleteParticipants(ids);
     } catch (e) {
@@ -303,6 +428,14 @@ export const api = {
 
   // Selection Weights
   async getWeights(): Promise<SelectionWeights> {
+    if (isSupabaseConfigured) {
+      try {
+        const spWeights = await supabaseService.getSelectionWeights();
+        if (spWeights) return spWeights;
+      } catch (err) {
+        console.warn('[Supabase] getSelectionWeights error:', err);
+      }
+    }
     if (await isServerAvailable()) {
       try {
         const res = await fetch('/api/selection-weights');
@@ -312,6 +445,9 @@ export const api = {
     return fsGetWeights();
   },
   async updateWeights(data: SelectionWeights): Promise<SelectionWeights> {
+    if (isSupabaseConfigured) {
+      supabaseService.updateSelectionWeights(data).catch((err) => console.warn('[Supabase] updateWeights error:', err));
+    }
     const fsPromise = fsUpdateWeights(data);
     if (await isServerAvailable()) {
       fetch('/api/selection-weights', {
@@ -380,5 +516,17 @@ export const api = {
       if (res.ok) return await res.json();
     } catch {}
     return { status: 'ok', database: 'Cloud Firestore (Online)', isConfigured: true };
+  },
+
+  // Sync all entities to Supabase
+  async syncAllToSupabase(payload: {
+    participants?: Participant[];
+    academicYears?: AcademicYear[];
+    faculties?: Faculty[];
+    studyPrograms?: StudyProgram[];
+    users?: User[];
+    weights?: SelectionWeights;
+  }) {
+    return supabaseService.syncAllToSupabase(payload);
   },
 };

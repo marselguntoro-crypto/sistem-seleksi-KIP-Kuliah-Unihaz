@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DatabaseBackupItem, Participant, StudyProgram, Faculty, AcademicYear, User, SelectionAuditLog, SelectionWeights } from '../../types';
 import { api } from '../../utils/api';
+import { testSupabaseConnection, isSupabaseConfigured } from '../../services/supabaseClient';
 import {
   Database,
   Download,
@@ -72,9 +73,69 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
 
   // Health and Database Engine state
   const [dbHealth, setDbHealth] = useState<{ status: string; database: string; mongodb?: any; isConfigured: boolean } | null>(null);
+  
+  // Supabase Connection Test state
+  const [supabaseTest, setSupabaseTest] = useState<{
+    testing: boolean;
+    tested: boolean;
+    success?: boolean;
+    message?: string;
+    latencyMs?: number;
+    url?: string;
+    isConfigured?: boolean;
+  }>({
+    testing: false,
+    tested: false,
+    isConfigured: isSupabaseConfigured,
+  });
+
+  const runTestSupabase = async () => {
+    setSupabaseTest(prev => ({ ...prev, testing: true }));
+    const result = await testSupabaseConnection();
+    setSupabaseTest({
+      testing: false,
+      tested: true,
+      success: result.success,
+      message: result.message,
+      latencyMs: result.latencyMs,
+      url: result.url,
+      isConfigured: result.isConfigured,
+    });
+  };
+
+  const [isSyncingSupabase, setIsSyncingSupabase] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+
+  const handleSyncToSupabase = async () => {
+    setIsSyncingSupabase(true);
+    setSyncFeedback(null);
+    try {
+      const res = await api.syncAllToSupabase({
+        participants,
+        academicYears,
+        faculties,
+        studyPrograms,
+        users,
+        weights,
+      });
+      if (res.success) {
+        setSyncFeedback(`✅ Berhasil mengirim ${res.count} data ke tabel Supabase!`);
+        runTestSupabase();
+      } else {
+        setSyncFeedback(`⚠️ Gagal: ${res.error || 'Terjadi kesalahan saat sinkronisasi'}`);
+      }
+    } catch (err: any) {
+      setSyncFeedback(`⚠️ Error: ${err?.message || 'Gagal sinkronisasi'}`);
+    } finally {
+      setIsSyncingSupabase(false);
+    }
+  };
 
   useEffect(() => {
     api.getHealth().then(setDbHealth).catch(() => {});
+    if (isSupabaseConfigured) {
+      runTestSupabase();
+    }
   }, []);
 
   // Database statistics
@@ -348,6 +409,83 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
               <span className="text-xs font-bold text-purple-900">Setiap 02:00 WIB</span>
               <span className="text-[10px] text-purple-600 font-semibold">Harian</span>
             </div>
+          </div>
+        </div>
+
+        {/* Live Supabase Connection Banner & Interactive Tester */}
+        <div className="mt-4 p-3.5 bg-gradient-to-r from-emerald-50/70 via-slate-50 to-blue-50/70 rounded-lg border border-slate-200/90 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+              supabaseTest.tested && supabaseTest.success
+                ? 'bg-emerald-600 text-white'
+                : supabaseTest.testing
+                ? 'bg-blue-600 text-white animate-pulse'
+                : supabaseTest.isConfigured
+                ? 'bg-slate-800 text-white'
+                : 'bg-amber-100 text-amber-700'
+            }`}>
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-bold text-slate-800">Supabase Cloud PostgreSQL</h4>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  supabaseTest.tested && supabaseTest.success
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : supabaseTest.testing
+                    ? 'bg-blue-100 text-blue-800'
+                    : supabaseTest.isConfigured
+                    ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                    : 'bg-amber-100 text-amber-800 border border-amber-300'
+                }`}>
+                  {supabaseTest.tested && supabaseTest.success
+                    ? '● Terhubung Aktif'
+                    : supabaseTest.testing
+                    ? 'Memeriksa...'
+                    : supabaseTest.isConfigured
+                    ? 'Terkonfigurasi di Vercel'
+                    : 'Belum Dikonfigurasi'}
+                </span>
+                {supabaseTest.latencyMs !== undefined && (
+                  <span className="text-[10px] font-mono text-slate-500">
+                    ({supabaseTest.latencyMs} ms)
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-600 mt-0.5">
+                {supabaseTest.tested
+                  ? supabaseTest.message
+                  : supabaseTest.isConfigured
+                  ? 'Klik tombol di samping untuk menguji ping query langsung ke tabel Supabase Anda.'
+                  : 'Variabel lingkungan VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY belum terdeteksi.'}
+              </p>
+              {syncFeedback && (
+                <p className="text-[11px] font-semibold text-emerald-800 mt-1 bg-emerald-100/80 px-2 py-0.5 rounded border border-emerald-300 inline-block">
+                  {syncFeedback}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleSyncToSupabase}
+              disabled={isSyncingSupabase || !supabaseTest.isConfigured}
+              title="Kirim seluruh data peserta dan master data yang ada saat ini langsung ke tabel Supabase"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-900 hover:bg-blue-800 text-white transition disabled:opacity-50 cursor-pointer shadow-2xs"
+            >
+              <UploadCloud className={`w-3.5 h-3.5 ${isSyncingSupabase ? 'animate-bounce' : ''}`} />
+              <span>{isSyncingSupabase ? 'Mengirim Data...' : 'Sinkronkan Data ke Supabase'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={runTestSupabase}
+              disabled={supabaseTest.testing}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white transition disabled:opacity-50 cursor-pointer shadow-2xs"
+            >
+              <RotateCcw className={`w-3.5 h-3.5 ${supabaseTest.testing ? 'animate-spin' : ''}`} />
+              <span>{supabaseTest.testing ? 'Menguji...' : 'Uji Koneksi'}</span>
+            </button>
           </div>
         </div>
       </div>
