@@ -578,6 +578,20 @@ export const supabaseService = {
     }
   },
 
+  async batchDeleteParticipants(ids: number[]): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('participants')
+        .delete()
+        .in('id', ids);
+
+      if (error) throw error;
+    } catch (err: any) {
+      console.error('[Supabase] Error batch deleting participants:', err.message || err);
+      throw err;
+    }
+  },
+
   // ----------------------------------------
   // ACADEMIC YEARS CRUD
   // ----------------------------------------

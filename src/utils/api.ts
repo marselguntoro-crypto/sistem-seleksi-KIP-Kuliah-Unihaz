@@ -401,9 +401,7 @@ export const api = {
   async batchDeleteParticipants(ids: number[]): Promise<void> {
     if (!ids || ids.length === 0) return;
     if (isSupabaseConfigured) {
-      ids.forEach((id) => {
-        supabaseService.deleteParticipant(id).catch(() => {});
-      });
+      supabaseService.batchDeleteParticipants(ids).catch((err) => console.warn('[Supabase] batchDelete error:', err));
     }
     try {
       await fsBatchDeleteParticipants(ids);
