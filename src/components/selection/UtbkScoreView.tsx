@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { Participant, StudyProgram, User } from '../../types';
+import { Participant, StudyProgram, User, AcademicYear } from '../../types';
 import {
   FileText,
   Search,
@@ -30,6 +30,7 @@ import {
 interface UtbkScoreViewProps {
   participants: Participant[];
   studyPrograms: StudyProgram[];
+  academicYears?: AcademicYear[];
   currentUser: User;
   onUpdateParticipant: (participant: Participant) => void;
   onBatchUpdateParticipants?: (participants: Participant[], message?: string) => void;
@@ -127,10 +128,12 @@ export const parseFlexibleUtbkScore = (raw: any): ParseScoreResult => {
 export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
   participants,
   studyPrograms,
+  academicYears,
   currentUser,
   onUpdateParticipant,
   onBatchUpdateParticipants
 }) => {
+  const activeYear = useMemo(() => academicYears?.find((y) => y.isActive) || null, [academicYears]);
   // Mode selection: 'MANUAL' or 'IMPORT'
   const [activeMode, setActiveMode] = useState<'MANUAL' | 'IMPORT'>('MANUAL');
 
@@ -635,8 +638,13 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
             <FileText className="w-5 h-5" />
           </span>
           <div>
-            <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
-              Tahap 2: Pengelolaan Nilai UTBK / TPA
+            <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2 flex-wrap">
+              <span>Tahap 2: Pengelolaan Nilai UTBK / TPA</span>
+              {activeYear && (
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-300">
+                  T.A {activeYear.code} (Aktif)
+                </span>
+              )}
               <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
                 Seleksi Tahap Pertama
               </span>

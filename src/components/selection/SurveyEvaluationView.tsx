@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Participant, StudyProgram, User } from '../../types';
+import { Participant, StudyProgram, User, AcademicYear } from '../../types';
 import { calculateStage1Score } from '../../utils/selectionUtils';
 import {
   MapPin,
@@ -23,6 +23,7 @@ import {
 interface SurveyEvaluationViewProps {
   participants: Participant[];
   studyPrograms: StudyProgram[];
+  academicYears?: AcademicYear[];
   currentUser: User;
   onUpdateParticipant: (participant: Participant) => void;
 }
@@ -30,9 +31,11 @@ interface SurveyEvaluationViewProps {
 export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
   participants,
   studyPrograms,
+  academicYears,
   currentUser,
   onUpdateParticipant
 }) => {
+  const activeYear = useMemo(() => academicYears?.find((y) => y.isActive) || null, [academicYears]);
   const [searchTerm, setSearchTerm] = useState('');
   const [surveyFilter, setSurveyFilter] = useState<'ALL' | 'SURVEYED' | 'PENDING'>('ALL');
   const [stage1Filter, setStage1Filter] = useState<'ALL' | 'STAGE1_COMPLETE' | 'STAGE1_PENDING'>('ALL');
@@ -159,8 +162,13 @@ export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
             <MapPin className="w-5 h-5" />
           </span>
           <div>
-            <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
-              Tahap 4: Penilaian Survey Lapangan
+            <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2 flex-wrap">
+              <span>Tahap 4: Penilaian Survey Lapangan</span>
+              {activeYear && (
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-300">
+                  T.A {activeYear.code} (Aktif)
+                </span>
+              )}
               <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-900 border border-cyan-300">
                 Tahap Akhir Dinamis
               </span>

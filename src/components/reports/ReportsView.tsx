@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Participant, StudyProgram, AcademicYear, User } from '../../types';
 import {
   FileText,
@@ -130,6 +130,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const currentAcademicYear = useMemo(() => {
     return academicYears.find((y) => String(y.id) === selectedAcademicYearId) || academicYears[0];
   }, [academicYears, selectedAcademicYearId]);
+
+  // Sync selectedAcademicYearId whenever active academic year changes
+  useEffect(() => {
+    const active = academicYears.find((y) => y.isActive);
+    if (active) {
+      setSelectedAcademicYearId(String(active.id));
+    }
+  }, [academicYears]);
 
   const isPassedStatus = (status?: string) =>
     status === 'Lulus' ||

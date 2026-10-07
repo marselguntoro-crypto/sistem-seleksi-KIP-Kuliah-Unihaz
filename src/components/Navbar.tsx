@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { User } from '../types';
+import { User, AcademicYear } from '../types';
 import { Menu, LogOut, Code, CheckCircle2, ChevronDown, User as UserIcon, Mail, Shield } from 'lucide-react';
 
 interface NavbarProps {
   currentUser: User | null;
+  activeAcademicYear?: AcademicYear | null;
   onLogout: () => void;
   onOpenCodeExplorer: () => void;
   onOpenTestRunner: () => void;
@@ -14,6 +15,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
+  activeAcademicYear,
   onLogout,
   onOpenCodeExplorer,
   onOpenTestRunner,
@@ -57,7 +59,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div className="flex items-center gap-2">
                 <span className="font-bold text-sm text-slate-900 tracking-tight">KIP-KULIAH UNIHAZ</span>
                 <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-yellow-100 text-yellow-800 border border-yellow-300/60 uppercase">
-                  T.A 2026/2027
+                  T.A {activeAcademicYear ? activeAcademicYear.code : 'Nonaktif'}
                 </span>
                 <span className="hidden md:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-300" title="Cloud Firestore Real-time Multi-User Sync Active">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AcademicYear } from '../../types';
+import { AcademicYear, Participant } from '../../types';
 import { 
   Calendar, 
   Plus, 
@@ -12,11 +12,14 @@ import {
   AlertCircle,
   Clock,
   ShieldAlert,
-  Info
+  Info,
+  Radio,
+  Check
 } from 'lucide-react';
 
 interface AcademicYearsViewProps {
   academicYears: AcademicYear[];
+  participants?: Participant[];
   onAdd?: (academicYear: Omit<AcademicYear, 'id'>) => void;
   onUpdate?: (academicYear: AcademicYear) => void;
   onDelete?: (id: number) => { success: boolean; message: string } | void;
@@ -30,6 +33,7 @@ interface AcademicYearsViewProps {
 
 export const AcademicYearsView: React.FC<AcademicYearsViewProps> = ({
   academicYears = [],
+  participants = [],
   onAdd,
   onUpdate,
   onDelete,
@@ -143,6 +147,12 @@ export const AcademicYearsView: React.FC<AcademicYearsViewProps> = ({
 
   const handleDeleteConfirm = () => {
     if (!deleteCandidate) return;
+    const count = getYearParticipantsCount(deleteCandidate);
+    if (count > 0) {
+      alert(`Tidak dapat menghapus Tahun Akademik ${deleteCandidate.code} karena masih memiliki ${count} data calon mahasiswa. Hapus atau pindahkan data peserta terlebih dahulu.`);
+      setDeleteCandidate(null);
+      return;
+    }
     if (handleDeleteAction) {
       const result = handleDeleteAction(deleteCandidate.id);
       if (result && typeof result === 'object' && result.success === false) {
@@ -163,11 +173,22 @@ export const AcademicYearsView: React.FC<AcademicYearsViewProps> = ({
     return matchesSearch;
   });
 
+  // Helper to get real-time participant count for an academic year
+  const getYearParticipantsCount = (item: AcademicYear) => {
+    if (!participants || participants.length === 0) return item.participantsCount || 0;
+    return participants.filter(
+      (p) => p.academicYearId === item.id || p.academicYearCode === item.code
+    ).length;
+  };
+
   // Calculate summary metrics
   const totalYears = academicYears.length;
   const activeYear = academicYears.find((y) => y.isActive);
   const totalQuota = academicYears.reduce((sum, y) => sum + y.quota, 0);
-  const totalParticipants = academicYears.reduce((sum, y) => sum + (y.participantsCount || 0), 0);
+  const totalParticipants = participants && participants.length > 0 
+    ? participants.length 
+    : academicYears.reduce((sum, y) => sum + (y.participantsCount || 0), 0);
+  const activeYearParticipants = activeYear ? getYearParticipantsCount(activeYear) : 0;
 
   return (
     <div className="space-y-5">
@@ -206,7 +227,7 @@ export const AcademicYearsView: React.FC<AcademicYearsViewProps> = ({
           <div className="text-lg font-bold text-emerald-700">
             {activeYear ? activeYear.code : 'Belum Ada'}
           </div>
-          <div className="text-[10px] text-slate-500 font-medium">Semester {activeYear?.semester || '-'}</div>
+          <div className="text-[10px] text-slate-500 font-medium">Semester {activeYear?.semester || '-'} &bull; <strong className="text-emerald-700">{activeYearParticipants} Pendaftar</strong></div>
         </div>
 
         <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
@@ -231,11 +252,11 @@ export const AcademicYearsView: React.FC<AcademicYearsViewProps> = ({
 
         <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider">Total Pendaftar</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider">Total Pendaftar Keseluruhan</span>
             <Users className="w-3.5 h-3.5 text-purple-600" />
           </div>
           <div className="text-lg font-bold text-purple-900">{totalParticipants} Peserta</div>
-          <div className="text-[10px] text-slate-500 font-medium">Akumulasi seluruh tahun</div>
+          <div className="text-[10px] text-slate-500 font-medium">{totalParticipants - activeYearParticipants} peserta arsip di tahun lain</div>
         </div>
       </div>
 
@@ -327,34 +348,42 @@ export const AcademicYearsView: React.FC<AcademicYearsViewProps> = ({
                         <span>{item.startDate} s/d {item.endDate}</span>
                       </div>
                     </td>
-                    <td className="py-3 px-3 text-center font-mono text-slate-700">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-800 border border-slate-200">
-                        {item.participantsCount || 0}
+                    <td className="py-3 px-3 text-center font-mono">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                        getYearParticipantsCount(item) > 0
+                          ? 'bg-blue-50 text-blue-800 border-blue-200'
+                          : 'bg-slate-100 text-slate-500 border-slate-200'
+                      }`}>
+                        {getYearParticipantsCount(item)} Peserta
                       </span>
                     </td>
                     <td className="py-3 px-3 text-center whitespace-nowrap">
-                      <button
-                        onClick={() => handleSetActiveAction && handleSetActiveAction(item.id)}
-                        disabled={item.isActive}
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold transition cursor-pointer ${
-                          item.isActive
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 cursor-default'
-                            : 'bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 border border-slate-200'
-                        }`}
-                        title={item.isActive ? 'Tahun Akademik Sedang Aktif' : 'Klik untuk Jadikan Aktif'}
-                      >
-                        {item.isActive ? (
-                          <>
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            <span>Aktif</span>
-                          </>
-                        ) : (
-                          <>
-                            <XCircle className="w-3 h-3 text-slate-400" />
-                            <span>Set Aktif</span>
-                          </>
-                        )}
-                      </button>
+                      {item.isActive ? (
+                        <div className="inline-flex items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>AKTIF</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleSetActiveAction && handleSetActiveAction(item.id)}
+                            className="text-[10px] text-slate-400 hover:text-rose-600 underline font-medium cursor-pointer"
+                            title="Klik untuk menonaktifkan tahun akademik ini"
+                          >
+                            Nonaktifkan
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleSetActiveAction && handleSetActiveAction(item.id)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all cursor-pointer"
+                          title="Klik untuk jadikan tahun akademik aktif (data pendaftar akan otomatis disesuaikan)"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Aktifkan Periode Ini</span>
+                        </button>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-center whitespace-nowrap">
                       <div className="inline-flex items-center gap-1.5">
@@ -501,17 +530,62 @@ export const AcademicYearsView: React.FC<AcademicYearsViewProps> = ({
                 />
               </div>
 
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="isActiveCheck"
-                  checked={formData.isActive}
-                  onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                  className="w-4 h-4 rounded text-blue-900 border-slate-300 focus:ring-blue-800"
-                />
-                <label htmlFor="isActiveCheck" className="text-xs text-slate-700 font-semibold cursor-pointer">
-                  Jadikan Tahun Akademik Aktif Sekarang
+              <div className="p-3.5 rounded-xl border border-blue-200 bg-blue-50/60 space-y-2">
+                <label className="block text-xs font-bold text-blue-950 uppercase tracking-wider">
+                  Status Tahun Akademik <span className="text-rose-500">*</span>
                 </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, isActive: true })}
+                    className={`p-2.5 rounded-lg border text-left transition flex items-start gap-2.5 cursor-pointer ${
+                      formData.isActive
+                        ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950 font-bold'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded-full mt-0.5 border flex items-center justify-center shrink-0 ${
+                      formData.isActive ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300'
+                    }`}>
+                      {formData.isActive && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                    </div>
+                    <div>
+                      <div className="text-xs flex items-center gap-1 font-bold">
+                        <span>Aktif (Berjalan)</span>
+                      </div>
+                      <div className="text-[10px] text-slate-500 font-normal leading-tight mt-0.5">
+                        Tahun utama. Pendaftar baru & tampilan data akan otomatis disesuaikan.
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, isActive: false })}
+                    className={`p-2.5 rounded-lg border text-left transition flex items-start gap-2.5 cursor-pointer ${
+                      !formData.isActive
+                        ? 'bg-slate-100 border-slate-400 ring-2 ring-slate-400/20 text-slate-900 font-bold'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded-full mt-0.5 border flex items-center justify-center shrink-0 ${
+                      !formData.isActive ? 'border-slate-600 bg-slate-600' : 'border-slate-300'
+                    }`}>
+                      {!formData.isActive && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold">Nonaktif (Arsip)</div>
+                      <div className="text-[10px] text-slate-500 font-normal leading-tight mt-0.5">
+                        Draft atau periode lalu. Data pendaftar periode ini akan diarsipkan/disembunyikan.
+                      </div>
+                    </div>
+                  </button>
+                </div>
+                {formData.isActive && (
+                  <p className="text-[11px] text-emerald-800 font-medium">
+                    💡 Menjadikan tahun ini AKTIF akan otomatis menonaktifkan tahun akademik lama, dan sistem akan menampilkan pendaftar periode ini.
+                  </p>
+                )}
               </div>
 
               <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">

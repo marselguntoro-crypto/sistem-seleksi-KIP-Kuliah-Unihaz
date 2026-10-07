@@ -97,21 +97,36 @@ export const ParticipantFormModal: React.FC<ParticipantFormModalProps> = ({
         notes: initialData.notes || ''
       });
     } else {
-      // Auto generate registration number
-      const nextNum = String(existingParticipants.length + 1).padStart(4, '0');
+      // Auto generate registration number matching active academic year
+      const yearPrefix = activeYear?.code ? activeYear.code.split('/')[0] : '2026';
+      const yearParticipants = existingParticipants.filter(
+        (p) => p.academicYearId === activeYear?.id || p.academicYearCode === activeYear?.code
+      );
+      const nextNum = String(yearParticipants.length + 1).padStart(4, '0');
       setFormData((prev) => ({
         ...prev,
-        regNumber: `KIPK-2026-${nextNum}`
+        academicYearId: activeYear?.id || prev.academicYearId,
+        academicYearCode: activeYear?.code || prev.academicYearCode,
+        graduationYear: parseInt(yearPrefix, 10) || 2026,
+        regNumber: `KIPK-${yearPrefix}-${nextNum}`
       }));
     }
-  }, [initialData, existingParticipants.length]);
+  }, [initialData, existingParticipants.length, activeYear]);
 
   const handleYearChange = (yearId: number) => {
     const selectedYear = academicYears.find((y) => y.id === yearId);
+    if (!selectedYear) return;
+    const yearPrefix = selectedYear.code.split('/')[0] || '2026';
+    const yearParticipants = existingParticipants.filter(
+      (p) => p.academicYearId === selectedYear.id || p.academicYearCode === selectedYear.code
+    );
+    const nextNum = String(yearParticipants.length + 1).padStart(4, '0');
     setFormData((prev) => ({
       ...prev,
       academicYearId: yearId,
-      academicYearCode: selectedYear?.code || prev.academicYearCode
+      academicYearCode: selectedYear.code,
+      graduationYear: parseInt(yearPrefix, 10) || prev.graduationYear,
+      regNumber: !isEdit ? `KIPK-${yearPrefix}-${nextNum}` : prev.regNumber
     }));
   };
 

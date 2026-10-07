@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
-import { DashboardStats, ParticipantScoreItem, User, Participant, StudyProgram, SelectionWeights } from '../types';
+import { DashboardStats, ParticipantScoreItem, User, Participant, StudyProgram, SelectionWeights, AcademicYear } from '../types';
 import {
   Users,
   Clock,
@@ -16,7 +16,8 @@ import {
   ChevronRight,
   Calculator,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  Calendar
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -28,6 +29,8 @@ interface DashboardViewProps {
   isRecalculating: boolean;
   participants?: Participant[];
   studyPrograms?: StudyProgram[];
+  academicYears?: AcademicYear[];
+  activeAcademicYear?: AcademicYear | null;
   weights?: SelectionWeights;
 }
 
@@ -40,6 +43,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   isRecalculating,
   participants = [],
   studyPrograms = [],
+  academicYears = [],
+  activeAcademicYear,
   weights
 }) => {
   const [searchTerm, setSearchTerm] = React.useState('');
@@ -299,16 +304,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-64 h-64 bg-yellow-400/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded text-[10px] font-bold bg-yellow-400/20 text-yellow-300 border border-yellow-400/30 uppercase tracking-wider mb-2">
-              <ShieldCheck className="w-3.5 h-3.5 text-yellow-400" />
-              <span>Sistem Seleksi Resmi Universitas Prof. Dr. Hazairin, SH</span>
+            <div className="flex items-center gap-2 flex-wrap mb-2">
+              <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded text-[10px] font-bold bg-yellow-400/20 text-yellow-300 border border-yellow-400/30 uppercase tracking-wider">
+                <ShieldCheck className="w-3.5 h-3.5 text-yellow-400" />
+                <span>Sistem Seleksi Resmi Universitas Prof. Dr. Hazairin, SH</span>
+              </div>
+              {activeAcademicYear && (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                  <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Periode Aktif: T.A {activeAcademicYear.code} (Semester {activeAcademicYear.semester})</span>
+                </div>
+              )}
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-              Pusat Pengelolaan & Perankingan KIP-Kuliah 2026
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2 flex-wrap">
+              <span>Pusat Pengelolaan & Perankingan KIP-Kuliah</span>
+              {activeAcademicYear && <span className="text-yellow-400 font-extrabold">{activeAcademicYear.code}</span>}
             </h1>
             <p className="text-xs text-blue-100 mt-1 max-w-2xl leading-relaxed">
               Selamat datang, <strong className="text-yellow-300">{currentUser.name}</strong>. Hak akses aktif:{' '}
               <span className="font-semibold text-white underline decoration-yellow-400 underline-offset-2">{currentUser.role}</span>.
+              {activeAcademicYear ? ` Menampilkan data seleksi untuk Tahun Akademik ${activeAcademicYear.code}.` : ''}
               Formula Seleksi: <strong>UTBK ({weights ? weights.utbkWeight : 35}%) + Wawancara ({weights ? weights.interviewWeight : 25}%) + Survey ({weights ? weights.surveyWeight : 25}%) + Afirmasi ({weights ? weights.affirmationWeight : 15}%)</strong>.
             </p>
           </div>

@@ -488,8 +488,13 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
             <Trophy className="w-5 h-5" />
           </span>
           <div>
-            <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+            <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2 flex-wrap">
               Keluaran Hasil Final: Ranking Seleksi KIP-Kuliah
+              {academicYears.find((y) => y.isActive) && (
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-300">
+                  T.A {academicYears.find((y) => y.isActive)?.code} (Aktif)
+                </span>
+              )}
               <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-900 border border-yellow-300">
                 Penetapan Hasil Akhir
               </span>

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Participant, StudyProgram, User } from '../../types';
+import { Participant, StudyProgram, User, AcademicYear } from '../../types';
 import { STANDARD_DOCUMENT_REQUIREMENTS } from '../../utils/selectionUtils';
 import { ImportVerificationModal } from './ImportVerificationModal';
 import {
@@ -25,6 +25,7 @@ import {
 interface DocumentVerificationViewProps {
   participants: Participant[];
   studyPrograms: StudyProgram[];
+  academicYears?: AcademicYear[];
   currentUser: User;
   onUpdateParticipant: (participant: Participant) => void;
   onBatchUpdateParticipants?: (updatedParticipants: Participant[]) => void;
@@ -33,10 +34,12 @@ interface DocumentVerificationViewProps {
 export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> = ({
   participants,
   studyPrograms,
+  academicYears,
   currentUser,
   onUpdateParticipant,
   onBatchUpdateParticipants
 }) => {
+  const activeYear = useMemo(() => academicYears?.find((y) => y.isActive) || null, [academicYears]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [prodiFilter, setProdiFilter] = useState<string>('ALL');
@@ -151,8 +154,13 @@ export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> =
               <ClipboardCheck className="w-5 h-5" />
             </span>
             <div>
-              <h1 className="text-xl font-bold text-slate-800 tracking-tight">
-                Tahap 1: Pemberkasan & Verifikasi Dokumen
+              <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2 flex-wrap">
+                <span>Tahap 1: Pemberkasan & Verifikasi Dokumen</span>
+                {activeYear && (
+                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-300">
+                    T.A {activeYear.code} (Aktif)
+                  </span>
+                )}
               </h1>
               <p className="text-xs text-slate-500">
                 Pencatatan penerimaan fisik berkas, verifikasi kelengkapan dokumen KIP-Kuliah, dan penugasan operator verifikator.

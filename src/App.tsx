@@ -86,6 +86,17 @@ export default function App() {
   const [backups, setBackups] = useState<DatabaseBackupItem[]>(INITIAL_BACKUPS);
   const [isDbLoaded, setIsDbLoaded] = useState(false);
 
+  // Active Academic Year Memo
+  const activeAcademicYear = useMemo(() => academicYears.find((y) => y.isActive) || null, [academicYears]);
+
+  // Participants scoped to active academic year (automatically hides inactive year participants)
+  const activeYearParticipants = useMemo(() => {
+    if (!activeAcademicYear) return participants;
+    return participants.filter(
+      (p) => p.academicYearId === activeAcademicYear.id || p.academicYearCode === activeAcademicYear.code
+    );
+  }, [participants, activeAcademicYear]);
+
   // Load initial data and subscribe to real-time Cloud Firestore updates
   useEffect(() => {
     let isMounted = true;
@@ -239,9 +250,10 @@ export default function App() {
     }, 4500);
   };
 
-  // Automatically derive ranking list from current participants
+  // Automatically derive ranking list from current active participants
   useEffect(() => {
-    const scoreItems: ParticipantScoreItem[] = participants.map((p) => ({
+    const scopedList = activeAcademicYear ? activeYearParticipants : participants;
+    const scoreItems: ParticipantScoreItem[] = scopedList.map((p) => ({
       id: p.id,
       rank: p.rank || 1,
       name: p.name,
@@ -262,7 +274,7 @@ export default function App() {
       rank: idx + 1
     }));
     setRankings(reRanked);
-  }, [participants]);
+  }, [participants, activeAcademicYear, activeYearParticipants]);
 
   const handleRestrictedAttempt = (moduleName: string) => {
     showToast(
@@ -388,24 +400,55 @@ export default function App() {
     const nextId = academicYears.length > 0 ? Math.max(...academicYears.map((y) => y.id)) + 1 : 1;
     let list = [...academicYears];
     if (newYear.isActive) {
-      list = list.map((y) => ({ ...y, isActive: false }));
+      list = list.map((y) => {
+        if (y.isActive) {
+          const deact = { ...y, isActive: false };
+          api.updateAcademicYear(deact).catch((err) => console.warn('Sync deactivate old year in DB:', err));
+          return deact;
+        }
+        return y;
+      });
     }
-    const created = { ...newYear, id: nextId };
+    const created: AcademicYear = { ...newYear, id: nextId };
     setAcademicYears([...list, created]);
     api.createAcademicYear(newYear).catch((err) => console.error('API create academic year error:', err));
-    showToast('success', 'Tahun Akademik Ditambahkan', `Tahun akademik ${newYear.code} berhasil dibuat.`);
+    
+    if (newYear.isActive) {
+      showToast(
+        'success',
+        'Tahun Akademik Aktif Dibuat',
+        `Tahun akademik ${newYear.code} berhasil dibuat dan dijadikan TAHUN AKTIF. Tampilan pendaftar otomatis beralih ke periode baru ${newYear.code}. Data pendaftar lama otomatis disembunyikan.`
+      );
+    } else {
+      showToast('success', 'Tahun Akademik Ditambahkan', `Tahun akademik ${newYear.code} berhasil dibuat (Status: Nonaktif).`);
+    }
   };
 
   const handleUpdateAcademicYear = (updated: AcademicYear) => {
-    let list = [...academicYears];
-    if (updated.isActive) {
-      list = list.map((y) => ({ ...y, isActive: y.id === updated.id }));
-    } else {
-      list = list.map((y) => (y.id === updated.id ? updated : y));
-    }
+    let list = academicYears.map((y) => {
+      if (y.id === updated.id) {
+        return updated;
+      }
+      if (updated.isActive && y.isActive) {
+        const deact = { ...y, isActive: false };
+        api.updateAcademicYear(deact).catch((err) => console.warn('Sync deactivate other year in DB:', err));
+        return deact;
+      }
+      return y;
+    });
     setAcademicYears(list);
     api.updateAcademicYear(updated).catch((err) => console.error('API update academic year error:', err));
-    showToast('success', 'Tahun Akademik Diperbarui', `Data tahun akademik ${updated.code} berhasil diperbarui.`);
+    
+    if (updated.isActive) {
+      const yearCount = participants.filter((p) => p.academicYearId === updated.id || p.academicYearCode === updated.code).length;
+      showToast(
+        'success',
+        'Tahun Akademik Aktif Diperbarui',
+        `Tahun akademik ${updated.code} kini AKTIF. Menampilkan ${yearCount} pendaftar periode ini. Data tahun lain otomatis disembunyikan.`
+      );
+    } else {
+      showToast('success', 'Tahun Akademik Diperbarui', `Data tahun akademik ${updated.code} berhasil diperbarui.`);
+    }
   };
 
   const handleDeleteAcademicYear = (id: number) => {
@@ -413,6 +456,11 @@ export default function App() {
     if (target?.isActive) {
       showToast('error', 'Aksi Ditolak', 'Tahun akademik yang sedang aktif tidak dapat dihapus.');
       return { success: false, message: 'Tahun akademik yang sedang aktif tidak dapat dihapus.' };
+    }
+    const participantCount = participants.filter((p) => p.academicYearId === id || p.academicYearCode === target?.code).length;
+    if (participantCount > 0) {
+      showToast('error', 'Aksi Ditolak', `Tahun akademik ${target?.code} masih memiliki ${participantCount} data pendaftar.`);
+      return { success: false, message: `Tahun akademik ${target?.code} masih memiliki ${participantCount} data pendaftar.` };
     }
     setAcademicYears((prev) => prev.filter((y) => y.id !== id));
     api.deleteAcademicYear(id).catch((err) => console.error('API delete academic year error:', err));
@@ -424,15 +472,37 @@ export default function App() {
     const target = academicYears.find((y) => y.id === id);
     if (!target) return;
     const nextState = !target.isActive;
+    
     let list = academicYears.map((y) => {
-      if (y.id === id) return { ...y, isActive: nextState };
-      if (nextState) return { ...y, isActive: false };
+      if (y.id === id) {
+        const updated = { ...y, isActive: nextState };
+        api.updateAcademicYear(updated).catch((err) => console.error('API toggle active status error:', err));
+        return updated;
+      }
+      if (nextState && y.isActive) {
+        const deact = { ...y, isActive: false };
+        api.updateAcademicYear(deact).catch((err) => console.error('API deactivate old year error:', err));
+        return deact;
+      }
       return y;
     });
+
     setAcademicYears(list);
-    const updatedTarget = { ...target, isActive: nextState };
-    api.updateAcademicYear(updatedTarget).catch((err) => console.error('API toggle academic year error:', err));
-    showToast('success', 'Status Diubah', `Tahun akademik ${target.code} kini ${nextState ? 'AKTIF' : 'NONAKTIF'}.`);
+
+    if (nextState) {
+      const yearCount = participants.filter((p) => p.academicYearId === target.id || p.academicYearCode === target.code).length;
+      showToast(
+        'success',
+        'Tahun Akademik Diaktifkan',
+        `Tahun akademik ${target.code} kini AKTIF! Menampilkan ${yearCount} pendaftar periode ${target.code}. Data pendaftar periode lain otomatis disembunyikan.`
+      );
+    } else {
+      showToast(
+        'warning',
+        'Tahun Akademik Dinonaktifkan',
+        `Tahun akademik ${target.code} kini NONAKTIF.`
+      );
+    }
   };
 
   // Master Data Faculties Handlers
@@ -669,26 +739,27 @@ export default function App() {
     showToast('success', 'Pemulihan Sukses', 'Seluruh data sistem berhasil dipulihkan dari berkas JSON.');
   };
 
-  // Dynamic Stats computed from live participants and master data
+  // Dynamic Stats computed from live participants and master data for the ACTIVE academic year
   const dynamicStats: DashboardStats = useMemo(() => {
-    const totalParticipants = participants.length;
-    const documentVerificationDone = participants.filter((p) => p.documentStatus === 'Lengkap').length;
+    const scopedList = activeAcademicYear ? activeYearParticipants : participants;
+    const totalParticipants = scopedList.length;
+    const documentVerificationDone = scopedList.filter((p) => p.documentStatus === 'Lengkap').length;
     const isPassed = (status?: string) =>
       status === 'Lulus' ||
       status === 'Lulus KIP DIKTI' ||
       status === 'Lulus KIP Aspirasi' ||
       status === 'Lulus KIP Jalur Lainnya';
-    const passed = participants.filter((p) => isPassed(p.selectionStatus)).length;
-    const failed = participants.filter((p) => p.selectionStatus === 'Tidak Lulus').length;
-    const reserved = participants.filter((p) => p.selectionStatus === 'Cadangan').length;
+    const passed = scopedList.filter((p) => isPassed(p.selectionStatus)).length;
+    const failed = scopedList.filter((p) => p.selectionStatus === 'Tidak Lulus').length;
+    const reserved = scopedList.filter((p) => p.selectionStatus === 'Cadangan').length;
 
     // Fully assessed = has scores for all 3 components
-    const fullyAssessed = participants.filter(
+    const fullyAssessed = scopedList.filter(
       (p) => (p.utbkScore || 0) > 0 && (p.interviewScore || 0) > 0 && (p.surveyScore || 0) > 0
     ).length;
 
     // Unassessed = has 0 for any of the 3 score components
-    const unassessed = participants.filter(
+    const unassessed = scopedList.filter(
       (p) => (p.utbkScore || 0) === 0 || (p.interviewScore || 0) === 0 || (p.surveyScore || 0) === 0
     ).length;
 
@@ -701,7 +772,7 @@ export default function App() {
       failed,
       reserved
     };
-  }, [participants]);
+  }, [participants, activeAcademicYear, activeYearParticipants]);
 
   // If logged out, render the authentic Laravel Login page
   if (!currentUser) {
@@ -726,6 +797,7 @@ export default function App() {
       {/* Top Navbar */}
       <Navbar
         currentUser={currentUser}
+        activeAcademicYear={activeAcademicYear}
         onLogout={() => {
           try {
             localStorage.removeItem('unihaz_kipk_session_user');
@@ -791,6 +863,7 @@ export default function App() {
             ) : activeRoute === 'academic-years' ? (
               <AcademicYearsView
                 academicYears={academicYears}
+                participants={participants}
                 onAdd={handleAddAcademicYear}
                 onUpdate={handleUpdateAcademicYear}
                 onDelete={handleDeleteAcademicYear}
@@ -838,38 +911,42 @@ export default function App() {
               />
             ) : activeRoute === 'documents' ? (
               <DocumentVerificationView
-                participants={participants}
+                participants={activeYearParticipants}
                 studyPrograms={studyPrograms}
+                academicYears={academicYears}
                 currentUser={currentUser}
                 onUpdateParticipant={handleUpdateParticipant}
                 onBatchUpdateParticipants={handleBatchUpdateParticipants}
               />
             ) : activeRoute === 'survey' ? (
               <SurveyEvaluationView
-                participants={participants}
+                participants={activeYearParticipants}
                 studyPrograms={studyPrograms}
+                academicYears={academicYears}
                 currentUser={currentUser}
                 onUpdateParticipant={handleUpdateParticipant}
               />
             ) : activeRoute === 'utbk' ? (
               <UtbkScoreView
-                participants={participants}
+                participants={activeYearParticipants}
                 studyPrograms={studyPrograms}
+                academicYears={academicYears}
                 currentUser={currentUser}
                 onUpdateParticipant={handleUpdateParticipant}
                 onBatchUpdateParticipants={handleBatchUpdateParticipants}
               />
             ) : activeRoute === 'interview' ? (
               <InterviewScoreView
-                participants={participants}
+                participants={activeYearParticipants}
                 studyPrograms={studyPrograms}
+                academicYears={academicYears}
                 currentUser={currentUser}
                 onUpdateParticipant={handleUpdateParticipant}
                 onBatchUpdateParticipants={handleBatchUpdateParticipants}
               />
             ) : activeRoute === 'ranking' || activeRoute === 'results' ? (
               <RankingResultsView
-                participants={participants}
+                participants={activeYearParticipants}
                 studyPrograms={studyPrograms}
                 academicYears={academicYears}
                 faculties={faculties}
@@ -976,6 +1053,7 @@ export default function App() {
                 onDelete={handleDeleteParticipant}
                 onBatchDelete={handleBatchDeleteParticipants}
                 onNavigateToImport={() => setActiveRoute('import')}
+                onNavigateToAcademicYears={() => setActiveRoute('academic-years')}
               />
             ) : (
               <DashboardView
@@ -985,8 +1063,10 @@ export default function App() {
                 onNavigate={setActiveRoute}
                 onRunRecalculate={handleRunRecalculate}
                 isRecalculating={isRecalculating}
-                participants={participants}
+                participants={activeYearParticipants}
                 studyPrograms={studyPrograms}
+                academicYears={academicYears}
+                activeAcademicYear={activeAcademicYear}
                 weights={weights}
               />
             )}
@@ -1001,7 +1081,7 @@ export default function App() {
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-100 text-yellow-800 border border-yellow-300/60 uppercase">
                 Laravel 12 + MySQL 8+
               </span>
-              <span>Tahun Akademik: <strong className="text-slate-800 font-semibold">2026/2027</strong></span>
+              <span>Tahun Akademik Aktif: <strong className="text-emerald-700 font-bold">{activeAcademicYear ? activeAcademicYear.code : 'Nonaktif'}</strong></span>
             </div>
           </footer>
         </main>

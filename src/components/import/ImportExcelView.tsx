@@ -511,7 +511,7 @@ export const ImportExcelView: React.FC<ImportExcelViewProps> = ({
         warnings,
         rawPayload: {
           name,
-          regNumber: regNumber || `KIPK-2026-AUTO${rowNum}`,
+          regNumber: regNumber || `KIPK-${activeYear?.code ? activeYear.code.split('/')[0] : '2026'}-AUTO${rowNum}`,
           nik,
           nisn,
           academicYearId: activeYear.id,

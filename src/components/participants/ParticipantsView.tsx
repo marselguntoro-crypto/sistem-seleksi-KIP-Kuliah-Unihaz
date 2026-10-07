@@ -40,6 +40,7 @@ interface ParticipantsViewProps {
   onDelete: (id: number) => void;
   onBatchDelete?: (ids: number[]) => void;
   onNavigateToImport: () => void;
+  onNavigateToAcademicYears?: () => void;
 }
 
 export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
@@ -51,10 +52,14 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
   onDelete,
   onBatchDelete,
   onNavigateToImport,
+  onNavigateToAcademicYears,
 }) => {
-  // Filters state
+  // Active academic year object
+  const activeYear = useMemo(() => academicYears.find((y) => y.isActive) || null, [academicYears]);
+
+  // Filters state - Default to ACTIVE academic year
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedYear, setSelectedYear] = useState<string>('ALL');
+  const [selectedYear, setSelectedYear] = useState<string>('ACTIVE');
   const [selectedProdi1, setSelectedProdi1] = useState<string>('ALL');
   const [selectedProdi2, setSelectedProdi2] = useState<string>('ALL');
   const [selectedDesil, setSelectedDesil] = useState<string>('ALL');
@@ -95,8 +100,17 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
       if (!matchesSearch) return false;
 
       // Year Filter
-      if (selectedYear !== 'ALL' && item.academicYearId.toString() !== selectedYear) {
-        return false;
+      if (selectedYear === 'ACTIVE') {
+        if (activeYear) {
+          const matchId = item.academicYearId === activeYear.id;
+          const matchCode = item.academicYearCode === activeYear.code;
+          if (!matchId && !matchCode) return false;
+        }
+      } else if (selectedYear !== 'ALL') {
+        const targetYear = academicYears.find((y) => y.id.toString() === selectedYear);
+        const matchId = item.academicYearId.toString() === selectedYear;
+        const matchCode = targetYear ? item.academicYearCode === targetYear.code : false;
+        if (!matchId && !matchCode) return false;
       }
 
       // Prodi 1 Filter
@@ -136,6 +150,8 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
     participants,
     searchTerm,
     selectedYear,
+    activeYear,
+    academicYears,
     selectedProdi1,
     selectedProdi2,
     selectedDesil,
@@ -405,12 +421,18 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
               }}
               className="w-full text-xs py-1.5 px-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-800"
             >
-              <option value="ALL">Semua Periode</option>
-              {academicYears.map((y) => (
-                <option key={y.id} value={y.id.toString()}>
-                  {y.code} {y.isActive ? '(Aktif)' : ''}
-                </option>
-              ))}
+              <option value="ACTIVE">
+                🌟 Tahun Aktif: {activeYear ? activeYear.code : 'Belum Ada'} ({activeYear ? participants.filter((p) => p.academicYearId === activeYear.id || p.academicYearCode === activeYear.code).length : 0} Peserta)
+              </option>
+              {academicYears.map((y) => {
+                const count = participants.filter((p) => p.academicYearId === y.id || p.academicYearCode === y.code).length;
+                return (
+                  <option key={y.id} value={y.id.toString()}>
+                    T.A {y.code} {y.isActive ? '(Aktif)' : '(Nonaktif)'} ({count} Peserta)
+                  </option>
+                );
+              })}
+              <option value="ALL">📁 Semua Periode / Arsip Lengkap ({participants.length} Peserta)</option>
             </select>
           </div>
 
@@ -534,6 +556,57 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
         </div>
       </div>
 
+      {/* Active Academic Year Context Banner */}
+      {activeYear && (
+        <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white rounded-xl p-3.5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border border-blue-800">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-yellow-400 text-blue-950 flex items-center justify-center font-bold shrink-0">
+              <Calendar className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold uppercase tracking-wider text-yellow-300">
+                  Tahun Akademik Aktif:
+                </span>
+                <span className="text-sm font-extrabold text-white">
+                  {activeYear.code} (Semester {activeYear.semester})
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 uppercase">
+                  Aktif
+                </span>
+              </div>
+              <p className="text-[11px] text-blue-200 mt-0.5">
+                {selectedYear === 'ACTIVE'
+                  ? `Sistem menyaring otomatis: Menampilkan ${filteredParticipants.length} pendaftar periode ini. Data tahun lain tersimpan aman di database.`
+                  : `Menampilkan data sesuai filter (${filteredParticipants.length} peserta).`}
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            {selectedYear !== 'ACTIVE' && (
+              <button
+                type="button"
+                onClick={() => setSelectedYear('ACTIVE')}
+                className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition cursor-pointer"
+              >
+                Kembali ke Tahun Aktif
+              </button>
+            )}
+            {onNavigateToAcademicYears && (
+              <button
+                type="button"
+                onClick={onNavigateToAcademicYears}
+                className="px-3 py-1.5 rounded-lg bg-yellow-400 hover:bg-yellow-300 text-blue-950 text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span>Kelola Periode & Kuota</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Main High Density Table Container */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
         {/* Table Subheader */}
@@ -654,15 +727,46 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
               {paginatedData.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="py-12 text-center text-slate-400">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <Users className="w-8 h-8 text-slate-300" />
-                      <p className="font-semibold text-xs">Tidak ada data peserta yang cocok dengan filter pencarian.</p>
-                      <button
-                        onClick={handleResetFilters}
-                        className="text-blue-700 underline text-xs cursor-pointer mt-1"
-                      >
-                        Reset semua filter
-                      </button>
+                    <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
+                      <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-900 flex items-center justify-center mb-1">
+                        <Users className="w-6 h-6 text-blue-800" />
+                      </div>
+                      <p className="font-bold text-sm text-slate-800">
+                        {selectedYear === 'ACTIVE'
+                          ? `Belum Ada Calon Mahasiswa untuk Tahun Akademik ${activeYear ? activeYear.code : ''} (Aktif)`
+                          : 'Tidak ada data peserta yang cocok dengan filter'}
+                      </p>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        {selectedYear === 'ACTIVE'
+                          ? `Tahun akademik ${activeYear?.code} sedang AKTIF. Silakan tambahkan calon mahasiswa baru atau import file Excel untuk periode ini.`
+                          : 'Coba ubah kriteria pencarian atau atur ulang filter tahun akademik.'}
+                      </p>
+                      {participants.length > 0 && selectedYear === 'ACTIVE' && (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-xs font-medium text-left mt-1 w-full">
+                          💡 Sebanyak <strong>{participants.length} pendaftar</strong> dari tahun akademik lain otomatis disembunyikan. Jika Anda ingin melihat kembali pendaftar lama, cukup aktifkan kembali tahun akademik tersebut di menu <strong>Master Data Periode & Kuota</strong> atau pilih <em>Semua Periode</em> pada filter.
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 mt-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingParticipant(null);
+                            setFormModalOpen(true);
+                          }}
+                          className="px-3.5 py-2 bg-yellow-400 hover:bg-yellow-300 text-blue-950 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1.5 shadow-xs transition-all"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>+ Tambah Peserta Baru ({activeYear?.code})</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={onNavigateToImport}
+                          className="px-3.5 py-2 bg-blue-800 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5 shadow-xs transition-all"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Import Excel</span>
+                        </button>
+                      </div>
                     </div>
                   </td>
                 </tr>

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { Participant, StudyProgram, User } from '../../types';
+import { Participant, StudyProgram, User, AcademicYear } from '../../types';
 import {
   MessageSquare,
   Search,
@@ -30,6 +30,7 @@ import {
 interface InterviewScoreViewProps {
   participants: Participant[];
   studyPrograms: StudyProgram[];
+  academicYears?: AcademicYear[];
   currentUser: User;
   onUpdateParticipant: (participant: Participant) => void;
   onBatchUpdateParticipants?: (participants: Participant[], message?: string) => void;
@@ -279,10 +280,12 @@ export const parseFlexibleInterviewDate = (rawVal: any): ParseDateResult => {
 export const InterviewScoreView: React.FC<InterviewScoreViewProps> = ({
   participants,
   studyPrograms,
+  academicYears,
   currentUser,
   onUpdateParticipant,
   onBatchUpdateParticipants
 }) => {
+  const activeYear = useMemo(() => academicYears?.find((y) => y.isActive) || null, [academicYears]);
   // Navigation State
   const [activeTab, setActiveTab] = useState<'LIST' | 'IMPORT'>('LIST');
 
@@ -830,8 +833,13 @@ export const InterviewScoreView: React.FC<InterviewScoreViewProps> = ({
             <MessageSquare className="w-5 h-5" />
           </span>
           <div>
-            <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
-              Tahap 3: Penilaian Wawancara Calon Mahasiswa
+            <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2 flex-wrap">
+              <span>Tahap 3: Penilaian Wawancara Calon Mahasiswa</span>
+              {activeYear && (
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-300">
+                  T.A {activeYear.code} (Aktif)
+                </span>
+              )}
               <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">
                 Seleksi Tahap Pertama
               </span>
