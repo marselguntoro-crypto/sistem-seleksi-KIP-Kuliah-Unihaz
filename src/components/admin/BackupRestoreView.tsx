@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { DatabaseBackupItem, Participant, StudyProgram, Faculty, AcademicYear, User, SelectionAuditLog, SelectionWeights } from '../../types';
 import { api } from '../../utils/api';
-import { testSupabaseConnection, isSupabaseConfigured } from '../../services/supabaseClient';
+import { 
+  testSupabaseConnection, 
+  isSupabaseConfigured, 
+  updateSupabaseCredentials, 
+  getStoredSupabaseCredentials 
+} from '../../services/supabaseClient';
+import { SUPABASE_SCHEMA_SQL } from '../../services/supabaseSchemaSql';
 import {
   Database,
   Download,
@@ -21,7 +27,11 @@ import {
   Play,
   Layers,
   Sparkles,
-  Server
+  Server,
+  Settings,
+  Copy,
+  Check,
+  ExternalLink
 } from 'lucide-react';
 
 interface BackupRestoreViewProps {
@@ -83,14 +93,25 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
     latencyMs?: number;
     url?: string;
     isConfigured?: boolean;
+    needsSchema?: boolean;
+    source?: 'env' | 'localStorage' | 'none';
   }>({
     testing: false,
     tested: false,
     isConfigured: isSupabaseConfigured,
+    source: getStoredSupabaseCredentials().source,
   });
+
+  // Supabase Credentials Config & SQL Schema Modal states
+  const [isSupabaseConfigModalOpen, setIsSupabaseConfigModalOpen] = useState(false);
+  const [supabaseUrlInput, setSupabaseUrlInput] = useState('');
+  const [supabaseKeyInput, setSupabaseKeyInput] = useState('');
+  const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   const runTestSupabase = async () => {
     setSupabaseTest(prev => ({ ...prev, testing: true }));
+    const creds = getStoredSupabaseCredentials();
     const result = await testSupabaseConnection();
     setSupabaseTest({
       testing: false,
@@ -100,7 +121,28 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
       latencyMs: result.latencyMs,
       url: result.url,
       isConfigured: result.isConfigured,
+      needsSchema: result.needsSchema,
+      source: creds.source,
     });
+  };
+
+  const handleOpenSupabaseConfig = () => {
+    const creds = getStoredSupabaseCredentials();
+    setSupabaseUrlInput(creds.source !== 'none' ? creds.url : '');
+    setSupabaseKeyInput(creds.source !== 'none' ? creds.anonKey : '');
+    setIsSupabaseConfigModalOpen(true);
+  };
+
+  const handleSaveSupabaseConfig = async () => {
+    updateSupabaseCredentials(supabaseUrlInput, supabaseKeyInput);
+    setIsSupabaseConfigModalOpen(false);
+    runTestSupabase();
+  };
+
+  const handleClearSupabaseConfig = async () => {
+    updateSupabaseCredentials('', '');
+    setIsSupabaseConfigModalOpen(false);
+    runTestSupabase();
   };
 
   const [isSyncingSupabase, setIsSyncingSupabase] = useState(false);
@@ -413,13 +455,15 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
         </div>
 
         {/* Live Supabase Connection Banner & Interactive Tester */}
-        <div className="mt-4 p-3.5 bg-gradient-to-r from-emerald-50/70 via-slate-50 to-blue-50/70 rounded-lg border border-slate-200/90 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+        <div className="mt-4 p-4 bg-gradient-to-r from-emerald-50/70 via-slate-50 to-blue-50/70 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
               supabaseTest.tested && supabaseTest.success
-                ? 'bg-emerald-600 text-white'
+                ? 'bg-emerald-600 text-white ring-4 ring-emerald-100'
                 : supabaseTest.testing
                 ? 'bg-blue-600 text-white animate-pulse'
+                : supabaseTest.needsSchema
+                ? 'bg-amber-500 text-white ring-4 ring-amber-100'
                 : supabaseTest.isConfigured
                 ? 'bg-slate-800 text-white'
                 : 'bg-amber-100 text-amber-700'
@@ -427,13 +471,15 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
               <Database className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h4 className="text-xs font-bold text-slate-800">Supabase Cloud PostgreSQL</h4>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                   supabaseTest.tested && supabaseTest.success
                     ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                     : supabaseTest.testing
                     ? 'bg-blue-100 text-blue-800'
+                    : supabaseTest.needsSchema
+                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
                     : supabaseTest.isConfigured
                     ? 'bg-blue-100 text-blue-800 border border-blue-200'
                     : 'bg-amber-100 text-amber-800 border border-amber-300'
@@ -442,41 +488,76 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
                     ? '● Terhubung Aktif'
                     : supabaseTest.testing
                     ? 'Memeriksa...'
+                    : supabaseTest.needsSchema
+                    ? 'Perlu Schema SQL'
                     : supabaseTest.isConfigured
-                    ? 'Terkonfigurasi di Vercel'
+                    ? 'Kredensial Siap'
                     : 'Belum Dikonfigurasi'}
                 </span>
+                
+                {supabaseTest.source && supabaseTest.source !== 'none' && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-200/80 text-slate-700">
+                    Sumber: {supabaseTest.source === 'localStorage' ? 'Browser (LocalStorage)' : 'Vercel Env'}
+                  </span>
+                )}
+
                 {supabaseTest.latencyMs !== undefined && (
                   <span className="text-[10px] font-mono text-slate-500">
                     ({supabaseTest.latencyMs} ms)
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-600 mt-0.5">
+
+              <p className="text-[11px] text-slate-600 mt-1">
                 {supabaseTest.tested
                   ? supabaseTest.message
                   : supabaseTest.isConfigured
-                  ? 'Klik tombol di samping untuk menguji ping query langsung ke tabel Supabase Anda.'
-                  : 'Variabel lingkungan VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY belum terdeteksi.'}
+                  ? 'Kredensial database Supabase telah terpasang. Klik "Uji Koneksi" untuk memeriksa status tabel.'
+                  : 'Aplikasi di Vercel belum memiliki kredensial Supabase. Klik "Atur URL & Key" untuk mengaktifkannya.'}
               </p>
+
+              {supabaseTest.needsSchema && (
+                <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-100 border border-amber-300 text-amber-900 text-[11px] font-medium">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                  <span>Database Supabase Anda terhubung tetapi tabel belum dibuat.</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsSqlModalOpen(true)}
+                    className="underline font-bold text-amber-950 hover:text-black cursor-pointer ml-1"
+                  >
+                    Buka Skrip SQL Tabel
+                  </button>
+                </div>
+              )}
+
               {syncFeedback && (
-                <p className="text-[11px] font-semibold text-emerald-800 mt-1 bg-emerald-100/80 px-2 py-0.5 rounded border border-emerald-300 inline-block">
+                <p className="text-[11px] font-semibold text-emerald-800 mt-1.5 bg-emerald-100/80 px-2 py-0.5 rounded border border-emerald-300 inline-block">
                   {syncFeedback}
                 </p>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <button
               type="button"
-              onClick={handleSyncToSupabase}
-              disabled={isSyncingSupabase || !supabaseTest.isConfigured}
-              title={`Kirim seluruh ${participants.length} data peserta dan master data yang ada saat ini langsung ke tabel Supabase`}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-900 hover:bg-blue-800 text-white transition disabled:opacity-50 cursor-pointer shadow-2xs"
+              onClick={handleOpenSupabaseConfig}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 transition cursor-pointer shadow-2xs"
+              title="Atur Supabase Project URL & Anon Key"
             >
-              <UploadCloud className={`w-3.5 h-3.5 ${isSyncingSupabase ? 'animate-bounce' : ''}`} />
-              <span>{isSyncingSupabase ? 'Mengirim Data...' : `Sinkronkan Data (${participants.length} Peserta) ke Supabase`}</span>
+              <Settings className="w-3.5 h-3.5 text-slate-500" />
+              <span>Atur URL & Key</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setIsSqlModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 transition cursor-pointer shadow-2xs"
+              title="Lihat dan salin skrip DDL SQL untuk membuat seluruh tabel di Supabase"
+            >
+              <FileCode className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Skrip SQL Schema</span>
+            </button>
+
             <button
               type="button"
               onClick={runTestSupabase}
@@ -485,6 +566,17 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
             >
               <RotateCcw className={`w-3.5 h-3.5 ${supabaseTest.testing ? 'animate-spin' : ''}`} />
               <span>{supabaseTest.testing ? 'Menguji...' : 'Uji Koneksi'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSyncToSupabase}
+              disabled={isSyncingSupabase || !supabaseTest.isConfigured}
+              title={`Kirim seluruh ${participants.length} data peserta dan master data yang ada saat ini langsung ke tabel Supabase`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-900 hover:bg-blue-800 text-white transition disabled:opacity-50 cursor-pointer shadow-2xs"
+            >
+              <UploadCloud className={`w-3.5 h-3.5 ${isSyncingSupabase ? 'animate-bounce' : ''}`} />
+              <span>{isSyncingSupabase ? 'Mengirim Data...' : `Sinkronkan Data (${participants.length})`}</span>
             </button>
           </div>
         </div>
@@ -863,6 +955,196 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>{isRestoring ? 'Memulihkan Data...' : 'Konfirmasi & Pulihkan'}</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Atur Kredensial Supabase (URL & Anon Key) */}
+      {isSupabaseConfigModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-5 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold">Pengaturan Kredensial Supabase</h3>
+                  <p className="text-[11px] text-blue-200">Hubungkan aplikasi deployed Anda langsung ke database Supabase</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSupabaseConfigModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 text-blue-900 leading-relaxed">
+                <p className="font-semibold mb-1 flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
+                  Koneksi Langsung Tanpa Perlu Re-Deploy Vercel
+                </p>
+                <p className="text-[11px] text-blue-800">
+                  Anda dapat memasukkan <strong>Project URL</strong> dan <strong>Anon Key</strong> Supabase di sini. Kredensial akan disimpan di browser (localStorage) dan sistem langsung aktif terhubung.
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Project URL Supabase
+                </label>
+                <input
+                  type="text"
+                  placeholder="https://xxxxxxxxxxxxxxxxxxxx.supabase.co"
+                  value={supabaseUrlInput}
+                  onChange={(e) => setSupabaseUrlInput(e.target.value.trim())}
+                  className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Didapat dari: <em>Supabase Dashboard &gt; Project Settings &gt; API &gt; Project URL</em>
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Project API Anon / Public Key
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  value={supabaseKeyInput}
+                  onChange={(e) => setSupabaseKeyInput(e.target.value.trim())}
+                  className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 resize-none"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Didapat dari: <em>Supabase Dashboard &gt; Project Settings &gt; API &gt; Project API Keys (anon public)</em>
+                </p>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600 space-y-1">
+                <span className="font-bold text-slate-800 block">💡 Tips untuk Deploy Permanen di Vercel:</span>
+                <p>
+                  Untuk menghubungkan secara permanen bagi semua pengguna tanpa input manual, tambahkan 2 Environment Variables di Vercel Dashboard (<em>Settings &gt; Environment Variables</em>):
+                </p>
+                <code className="block bg-slate-200/70 p-1.5 rounded font-mono text-[10px] text-slate-800">
+                  VITE_SUPABASE_URL = {supabaseUrlInput || 'https://xxxxxxxx.supabase.co'}<br />
+                  VITE_SUPABASE_ANON_KEY = eyJhbG...
+                </code>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={handleClearSupabaseConfig}
+                className="text-xs text-rose-600 hover:text-rose-800 font-semibold cursor-pointer"
+              >
+                Reset Kredensial
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSupabaseConfigModalOpen(false)}
+                  className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveSupabaseConfig}
+                  disabled={!supabaseUrlInput || !supabaseKeyInput}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg bg-blue-900 hover:bg-blue-800 text-white transition disabled:opacity-50 cursor-pointer shadow-xs"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Simpan & Uji Koneksi</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Skrip DDL SQL Schema Supabase */}
+      {isSqlModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-3xl w-full border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
+                  <FileCode className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold">Skrip SQL Schema Database Supabase</h3>
+                  <p className="text-[11px] text-slate-300">Buat seluruh tabel dan data master awal di Supabase SQL Editor</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSqlModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-amber-50 border-b border-amber-200 text-xs text-amber-900 flex items-start gap-2.5 shrink-0">
+              <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">Cara Menjalankan Skrip Ini di Supabase:</p>
+                <ol className="list-decimal list-inside text-[11px] text-amber-800 mt-1 space-y-0.5">
+                  <li>Buka dashboard Supabase project Anda di peramban.</li>
+                  <li>Buka menu <strong>SQL Editor</strong> di bilah navigasi kiri.</li>
+                  <li>Klik <strong>New Query</strong>, lalu tempelkan (Paste) seluruh teks SQL di bawah ini.</li>
+                  <li>Klik tombol hijau <strong>Run</strong> (atau tekan Ctrl+Enter). Seluruh tabel dan data master langsung tercipta!</li>
+                </ol>
+              </div>
+            </div>
+
+            <div className="p-4 overflow-y-auto flex-1 bg-slate-950 font-mono text-[11px] text-slate-200">
+              <pre className="whitespace-pre-wrap select-all leading-relaxed">
+                {SUPABASE_SCHEMA_SQL}
+              </pre>
+            </div>
+
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
+              <span className="text-[11px] text-slate-500">
+                Mencakup 7 tabel: academic_years, faculties, study_programs, users, selection_weights, participants, audit_logs.
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(SUPABASE_SCHEMA_SQL);
+                    setCopiedSql(true);
+                    setTimeout(() => setCopiedSql(false), 2500);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white transition cursor-pointer shadow-xs"
+                >
+                  {copiedSql ? (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Berhasil Disalin!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Salin Semua SQL</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsSqlModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Tutup
+                </button>
+              </div>
             </div>
           </div>
         </div>

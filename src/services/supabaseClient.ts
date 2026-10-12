@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import {
   Participant,
   AcademicYear,
@@ -14,58 +14,133 @@ import {
 // ==========================================
 // 1. Supabase Client Configuration & Init
 // ==========================================
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://mock-unihaz-kip.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'mock-anon-key-unihaz';
+export function getStoredSupabaseCredentials(): {
+  url: string;
+  anonKey: string;
+  source: 'env' | 'localStorage' | 'none';
+} {
+  const envUrl = import.meta.env.VITE_SUPABASE_URL || '';
+  const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+  if (envUrl && envKey && !envUrl.includes('mock-unihaz')) {
+    return { url: envUrl.trim(), anonKey: envKey.trim(), source: 'env' };
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      const localUrl = localStorage.getItem('unihaz_supabase_url') || '';
+      const localKey = localStorage.getItem('unihaz_supabase_anon_key') || '';
+      if (localUrl && localKey) {
+        return { url: localUrl.trim(), anonKey: localKey.trim(), source: 'localStorage' };
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return {
+    url: envUrl || 'https://mock-unihaz-kip.supabase.co',
+    anonKey: envKey || 'mock-anon-key-unihaz',
+    source: 'none'
+  };
+}
 
-export const isSupabaseConfigured = Boolean(
-  import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+let activeCredentials = getStoredSupabaseCredentials();
+let activeClient: SupabaseClient<any, 'public', any> = createClient(activeCredentials.url, activeCredentials.anonKey);
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export let isSupabaseConfigured = activeCredentials.source !== 'none';
 
-export async function testSupabaseConnection(): Promise<{
+// Proxy ensures any file importing `supabase` always points to the active client instance
+export const supabase: SupabaseClient<any, 'public', any> = new Proxy({} as any, {
+  get(_target, prop) {
+    return (activeClient as any)[prop];
+  }
+});
+
+export function updateSupabaseCredentials(url: string, anonKey: string): boolean {
+  const cleanUrl = url.trim();
+  const cleanKey = anonKey.trim();
+  if (cleanUrl && cleanKey) {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('unihaz_supabase_url', cleanUrl);
+        localStorage.setItem('unihaz_supabase_anon_key', cleanKey);
+      } catch (e) {
+        console.warn('LocalStorage save error:', e);
+      }
+    }
+    activeCredentials = { url: cleanUrl, anonKey: cleanKey, source: 'localStorage' };
+    activeClient = createClient(cleanUrl, cleanKey);
+    isSupabaseConfigured = true;
+    return true;
+  } else {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('unihaz_supabase_url');
+        localStorage.removeItem('unihaz_supabase_anon_key');
+      } catch (e) {
+        // ignore
+      }
+    }
+    activeCredentials = getStoredSupabaseCredentials();
+    activeClient = createClient(activeCredentials.url, activeCredentials.anonKey);
+    isSupabaseConfigured = activeCredentials.source !== 'none';
+    return false;
+  }
+}
+
+export function getActiveSupabaseCredentials() {
+  return activeCredentials;
+}
+
+export async function testSupabaseConnection(overrideUrl?: string, overrideKey?: string): Promise<{
   success: boolean;
   message: string;
   latencyMs?: number;
   url: string;
   isConfigured: boolean;
+  needsSchema?: boolean;
 }> {
-  const url = import.meta.env.VITE_SUPABASE_URL || '';
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-  if (!url || !anonKey || url.includes('mock-unihaz')) {
+  const creds = overrideUrl && overrideKey 
+    ? { url: overrideUrl.trim(), anonKey: overrideKey.trim() } 
+    : getStoredSupabaseCredentials();
+
+  if (!creds.url || !creds.anonKey || creds.url.includes('mock-unihaz')) {
     return {
       success: false,
       message: 'Variabel VITE_SUPABASE_URL atau VITE_SUPABASE_ANON_KEY belum diisi.',
-      url: url || '(belum diisi)',
+      url: creds.url || '(belum diisi)',
       isConfigured: false
     };
   }
 
+  const testClient = overrideUrl && overrideKey ? createClient(creds.url, creds.anonKey) : activeClient;
   const start = performance.now();
   try {
-    const { error } = await supabase.from('users').select('id').limit(1);
+    const { error } = await testClient.from('users').select('id').limit(1);
     const latencyMs = Math.round(performance.now() - start);
     if (error) {
+      const isMissingTable = error.message?.includes('does not exist') || error.code === '42P01';
       return {
         success: false,
-        message: error.message,
+        message: isMissingTable
+          ? `Terkoneksi ke Supabase, namun tabel '${error.message.split('"')[1] || 'users'}' belum dibuat di database. Silakan jalankan skrip SQL di Supabase SQL Editor.`
+          : error.message,
         latencyMs,
-        url,
-        isConfigured: true
+        url: creds.url,
+        isConfigured: true,
+        needsSchema: isMissingTable
       };
     }
     return {
       success: true,
       message: 'Koneksi ke Supabase aktif dan berhasil merespons query!',
       latencyMs,
-      url,
+      url: creds.url,
       isConfigured: true
     };
   } catch (err: any) {
     return {
       success: false,
       message: err?.message || 'Gagal terhubung ke host Supabase',
-      url,
+      url: creds.url,
       isConfigured: true
     };
   }
