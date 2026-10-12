@@ -26,6 +26,7 @@ interface SurveyEvaluationViewProps {
   academicYears?: AcademicYear[];
   currentUser: User;
   onUpdateParticipant: (participant: Participant) => void;
+  onNavigateToStage1Ranking?: () => void;
 }
 
 export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
@@ -33,7 +34,8 @@ export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
   studyPrograms,
   academicYears,
   currentUser,
-  onUpdateParticipant
+  onUpdateParticipant,
+  onNavigateToStage1Ranking
 }) => {
   const activeYear = useMemo(() => academicYears?.find((y) => y.isActive) || null, [academicYears]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -163,19 +165,30 @@ export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
             <MapPin className="w-5 h-5" />
           </span>
           <div>
-            <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2 flex-wrap">
-              <span>Tahap 4: Penilaian Survey Lapangan</span>
-              {activeYear && (
-                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-300">
-                  T.A {activeYear.code} (Aktif)
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2 flex-wrap">
+                <span>Tahap 5: Penilaian Survey Lapangan</span>
+                {activeYear && (
+                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-300">
+                    T.A {activeYear.code} (Aktif)
+                  </span>
+                )}
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-900 border border-cyan-300">
+                  Tahap Akhir Dinamis
                 </span>
+              </h1>
+              {onNavigateToStage1Ranking && (
+                <button
+                  onClick={onNavigateToStage1Ranking}
+                  className="text-xs px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 font-medium inline-flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Kembali ke penetapan ranking Tahap 1 & kuota prodi"
+                >
+                  <span>← Cek Kuota Tahap 4</span>
+                </button>
               )}
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-900 border border-cyan-300">
-                Tahap Akhir Dinamis
-              </span>
-            </h1>
-            <p className="text-xs text-slate-500">
-              Verifikasi faktual tempat tinggal calon mahasiswa. Bersifat dinamis dan ditambahkan sebagai tahap akhir setelah evaluasi seleksi tahap pertama (UTBK & Wawancara).
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Verifikasi faktual tempat tinggal calon mahasiswa yang lolos seleksi Tahap 1 (UTBK & Wawancara).
             </p>
           </div>
         </div>

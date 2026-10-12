@@ -264,7 +264,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="mb-3">
             <div className="px-4 py-1 text-blue-300 uppercase text-[10px] font-bold tracking-wider flex items-center justify-between">
               <span>ALUR SELEKSI</span>
-              <span className="text-[9px] text-yellow-400 font-semibold">5 TAHAP</span>
+              <span className="text-[9px] text-yellow-400 font-semibold">6 TAHAP</span>
             </div>
             <div className="space-y-0.5">
               {/* 1. Pemberkasan */}
@@ -334,7 +334,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {!hasPermission('manage-interview-scores') && <Lock className="w-3 h-3 text-blue-400/50 shrink-0" />}
               </button>
 
-              {/* 4. Survey Lapangan (Dinamis / Tahap Akhir) */}
+              {/* 4. Ranking Tahap 1 & Kuota Prodi (Pra-Survey) */}
+              <button
+                id="sidebar-link-stage1-ranking"
+                onClick={() => handleLinkClick('stage1-ranking', 'manage-interview-scores', 'Ranking Tahap 1 & Kuota')}
+                className={`w-full flex items-center justify-between px-4 py-2 transition-colors ${
+                  hasPermission('manage-interview-scores') || hasPermission('view-rankings')
+                    ? activeRoute === 'stage1-ranking'
+                      ? 'bg-blue-900 border-l-4 border-yellow-400 text-white font-semibold cursor-pointer'
+                      : 'text-blue-100 hover:bg-blue-800 hover:text-white cursor-pointer'
+                    : 'text-blue-400/40 hover:bg-blue-950/20 cursor-not-allowed'
+                }`}
+              >
+                <div className="flex items-center">
+                  <Award className="w-4 h-4 mr-3 text-emerald-300 shrink-0" />
+                  <div className="flex items-center gap-1.5">
+                    <span>4. Ranking Tahap 1 & Kuota</span>
+                    <span className="text-[9px] font-bold px-1 rounded bg-emerald-950/60 text-emerald-200 border border-emerald-500/30">
+                      Kuota
+                    </span>
+                  </div>
+                </div>
+                {!(hasPermission('manage-interview-scores') || hasPermission('view-rankings')) && (
+                  <Lock className="w-3 h-3 text-blue-400/50 shrink-0" />
+                )}
+              </button>
+
+              {/* 5. Survey Lapangan (Dinamis / Tahap Akhir) */}
               <button
                 id="sidebar-link-survey"
                 onClick={() => handleLinkClick('survey', 'manage-survey-scores', 'Survey Lapangan')}
@@ -349,7 +375,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div className="flex items-center">
                   <MapPin className="w-4 h-4 mr-3 text-cyan-300 shrink-0" />
                   <div className="flex items-center gap-1.5">
-                    <span>4. Survey Lapangan</span>
+                    <span>5. Survey Lapangan</span>
                     <span className="text-[9px] font-bold px-1 rounded bg-cyan-900/60 text-cyan-200 border border-cyan-400/40">
                       Dinamis
                     </span>
@@ -358,7 +384,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {!hasPermission('manage-survey-scores') && <Lock className="w-3 h-3 text-blue-400/50 shrink-0" />}
               </button>
 
-              {/* 5. Ranking Seleksi (Keluaran Hasil Final) */}
+              {/* 6. Ranking Seleksi (Keluaran Hasil Final) */}
               <button
                 id="sidebar-link-ranking"
                 onClick={() => handleLinkClick('ranking', 'view-rankings', 'Ranking Seleksi (Hasil Final)')}
@@ -373,7 +399,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div className="flex items-center">
                   <Trophy className="w-4 h-4 mr-3 text-yellow-300 shrink-0" />
                   <div className="flex flex-col text-left">
-                    <span>5. Ranking Seleksi</span>
+                    <span>6. Ranking Seleksi</span>
                     <span className="text-[9px] text-yellow-300 font-normal">Keluaran Hasil Final</span>
                   </div>
                 </div>

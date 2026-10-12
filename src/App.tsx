@@ -48,6 +48,7 @@ import { SurveyEvaluationView } from './components/selection/SurveyEvaluationVie
 import { UtbkScoreView } from './components/selection/UtbkScoreView';
 import { InterviewScoreView } from './components/selection/InterviewScoreView';
 import { RankingResultsView } from './components/selection/RankingResultsView';
+import { Stage1RankingView } from './components/selection/Stage1RankingView';
 import { ReportsView } from './components/reports/ReportsView';
 import { OperatorsView } from './components/admin/OperatorsView';
 import { AuditLogsView } from './components/admin/AuditLogsView';
@@ -925,6 +926,7 @@ export default function App() {
                 academicYears={academicYears}
                 currentUser={currentUser}
                 onUpdateParticipant={handleUpdateParticipant}
+                onNavigateToStage1Ranking={() => setActiveRoute('stage1-ranking')}
               />
             ) : activeRoute === 'utbk' ? (
               <UtbkScoreView
@@ -943,6 +945,22 @@ export default function App() {
                 currentUser={currentUser}
                 onUpdateParticipant={handleUpdateParticipant}
                 onBatchUpdateParticipants={handleBatchUpdateParticipants}
+              />
+            ) : activeRoute === 'stage1-ranking' ? (
+              <Stage1RankingView
+                participants={activeYearParticipants}
+                studyPrograms={studyPrograms}
+                academicYears={academicYears}
+                faculties={faculties}
+                currentUser={currentUser}
+                weights={weights}
+                onUpdateParticipant={handleUpdateParticipant}
+                onBatchUpdateParticipants={handleBatchUpdateParticipants}
+                onNavigateToSurvey={() => setActiveRoute('survey')}
+                onUpdateWeights={(w) => {
+                  setWeights(w);
+                  showToast('success', 'Bobot Diperbarui', 'Konfigurasi formula bobot seleksi telah diperbarui.');
+                }}
               />
             ) : activeRoute === 'ranking' || activeRoute === 'results' ? (
               <RankingResultsView
