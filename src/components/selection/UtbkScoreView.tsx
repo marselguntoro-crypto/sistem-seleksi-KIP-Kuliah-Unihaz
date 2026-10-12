@@ -24,7 +24,8 @@ import {
   CheckCircle,
   XCircle,
   MinusCircle,
-  Info
+  Info,
+  Check
 } from 'lucide-react';
 
 interface UtbkScoreViewProps {
@@ -47,6 +48,7 @@ export interface ParsedScoreRow {
   formatNote?: string;
   notes: string;
   matchedParticipant: Participant | null;
+  matchMethod?: 'NISN' | 'REG_NUMBER' | 'EMAIL' | 'NAME' | 'NONE';
   status: 'VALID' | 'EMPTY_SCORE' | 'UNMATCHED' | 'INVALID_SCORE';
   errorMessage?: string;
 }
@@ -516,63 +518,69 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
         }
       }
 
-      // Match Participant with 4-level fallback
+      // =========================================================================
+      // PENCOCOKAN DATA PESERTA (PRIORITAS UTAMA #1: NISN)
+      // Moodle menyimpan NISN pada kolom Username (contoh: 0065130195)
+      // =========================================================================
       let matched: Participant | null = null;
+      let matchMethod: 'NISN' | 'REG_NUMBER' | 'EMAIL' | 'NAME' | 'NONE' = 'NONE';
 
-      // Level 1: Match by Registration Number
-      if (regNumber) {
-        matched =
-          participants.find(
-            (p) => p.regNumber.toLowerCase() === regNumber.toLowerCase()
-          ) || null;
-      }
-      if (!matched && usernameVal) {
-        matched =
-          participants.find(
-            (p) => p.regNumber.toLowerCase() === usernameVal.toLowerCase()
-          ) || null;
-      }
+      // 1. PRIORITAS TERTINGGI: Cocokkan berdasarkan NISN
+      const targetNisnCandidate = rawNisn || usernameVal.replace(/[^0-9]/g, '');
+      if (targetNisnCandidate) {
+        const cleanCandidate = targetNisnCandidate.replace(/[^0-9]/g, '');
+        const padded10 = cleanCandidate.padStart(10, '0');
+        const strippedZeros = cleanCandidate.replace(/^0+/, '');
 
-      // Level 2: Match by NISN (exact or padded)
-      if (!matched && rawNisn) {
-        matched =
-          participants.find((p) => {
-            const pNisn = String(p.nisn || '').trim();
-            return (
-              pNisn === rawNisn ||
-              pNisn.replace(/^0+/, '') === rawNisn.replace(/^0+/, '') ||
-              pNisn === rawNisn.padStart(10, '0') ||
-              pNisn.padStart(10, '0') === rawNisn
-            );
-          }) || null;
-      }
+        matched = participants.find((p) => {
+          const pNisn = String(p.nisn || '').trim();
+          const pClean = pNisn.replace(/[^0-9]/g, '');
+          const pStripped = pClean.replace(/^0+/, '');
 
-      // Level 3: Match by Username digits against p.nisn
-      if (!matched && usernameVal) {
-        const uDigits = usernameVal.replace(/[^0-9]/g, '');
-        if (uDigits) {
-          matched =
-            participants.find((p) => {
-              const pNisn = String(p.nisn || '').trim();
-              return (
-                pNisn === uDigits ||
-                pNisn.replace(/^0+/, '') === uDigits.replace(/^0+/, '') ||
-                pNisn === uDigits.padStart(10, '0') ||
-                pNisn.padStart(10, '0') === uDigits
-              );
-            }) || null;
+          return (
+            pClean === cleanCandidate ||
+            pClean === padded10 ||
+            pClean.padStart(10, '0') === padded10 ||
+            (strippedZeros.length > 0 && pStripped === strippedZeros)
+          );
+        }) || null;
+
+        if (matched) {
+          matchMethod = 'NISN';
         }
       }
 
-      // Level 4: Match by Email
+      // 2. CADANGAN TINGKAT 2: Cocokkan Nomor Pendaftaran (Reg Number)
+      if (!matched) {
+        if (regNumber) {
+          matched =
+            participants.find(
+              (p) => p.regNumber.toLowerCase() === regNumber.toLowerCase()
+            ) || null;
+        }
+        if (!matched && usernameVal) {
+          matched =
+            participants.find(
+              (p) => p.regNumber.toLowerCase() === usernameVal.toLowerCase()
+            ) || null;
+        }
+        if (matched) {
+          matchMethod = 'REG_NUMBER';
+        }
+      }
+
+      // 3. CADANGAN TINGKAT 3: Cocokkan Alamat Email
       if (!matched && email && !email.includes('kip.kuliah')) {
         matched =
           participants.find(
             (p) => p.email && p.email.trim().toLowerCase() === email
           ) || null;
+        if (matched) {
+          matchMethod = 'EMAIL';
+        }
       }
 
-      // Level 5: Match by Name (Exact normalized)
+      // 4. CADANGAN TINGKAT 4: Cocokkan Nama Lengkap (Normalisasi Huruf & Spasi)
       if (!matched && name) {
         const normName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
         matched =
@@ -585,17 +593,22 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
             }
             return false;
           }) || null;
+        if (matched) {
+          matchMethod = 'NAME';
+        }
       }
 
-      // Determine Status
+      // Tentukan NISN & No Reg final yang ditampilkan di pratinjau
+      const displayNisn = rawNisn || (matched ? matched.nisn : usernameVal || '-');
+      const displayReg = regNumber || (matched ? matched.regNumber : '-');
+
+      // Tentukan Status Baris
       let status: 'VALID' | 'EMPTY_SCORE' | 'UNMATCHED' | 'INVALID_SCORE' = 'VALID';
       let errorMessage: string | undefined = undefined;
 
       if (!matched) {
         status = 'UNMATCHED';
-        errorMessage = `Peserta dengan ${
-          usernameVal ? `Username/NISN '${usernameVal}'` : ''
-        }${name ? ` / Nama '${name}'` : ''} tidak ditemukan di database.`;
+        errorMessage = `NISN '${displayNisn}' (Username Moodle) tidak cocok dengan NISN peserta manapun di database.`;
       } else if (isScoreEmpty) {
         status = 'EMPTY_SCORE';
       } else if (!isScoreValid) {
@@ -605,8 +618,8 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
 
       return {
         rowNum,
-        regNumber: regNumber || (matched ? matched.regNumber : usernameVal || '-'),
-        nisn: rawNisn || (matched ? matched.nisn : usernameVal || '-'),
+        regNumber: displayReg,
+        nisn: displayNisn,
         name: name || (matched ? matched.name : '-'),
         rawScore,
         parsedScore,
@@ -614,6 +627,7 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
         formatNote,
         notes,
         matchedParticipant: matched,
+        matchMethod,
         status,
         errorMessage
       };
@@ -1115,7 +1129,7 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                 <tbody className="divide-y divide-slate-200">
                   {filteredParticipants.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-slate-400">
+                      <td colSpan={9} className="py-8 text-center text-slate-400">
                         Tidak ada calon mahasiswa yang sesuai filter.
                       </td>
                     </tr>
@@ -1338,7 +1352,7 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                         </span>
                       </div>
                       <p className="text-[11px] text-orange-800 mt-0.5">
-                        Kolom <strong>Username</strong> otomatis dipasangkan ke NISN / No. Pendaftaran peserta. Baris ringkasan <em>Overall average</em> otomatis disaring.
+                        Kolom <strong>Username Moodle</strong> langsung dijadikan <strong>kunci pencocokan utama ke NISN peserta</strong> di sistem. Baris ringkasan <em>Overall average</em> otomatis diabaikan.
                       </p>
                     </div>
                   </div>
@@ -1488,11 +1502,12 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                     <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
                       <tr>
                         <th className="py-3 px-4">Baris</th>
-                        <th className="py-3 px-4">No. Pendaftaran / NISN</th>
+                        <th className="py-3 px-4">NISN (Username Moodle)</th>
                         <th className="py-3 px-4">Peserta di Database</th>
                         <th className="py-3 px-4">Program Studi</th>
                         <th className="py-3 px-4 text-center">Nilai Lama</th>
                         <th className="py-3 px-4 text-center">Nilai Terbaca (Sistem)</th>
+                        <th className="py-3 px-4 text-center">Pencocokan</th>
                         <th className="py-3 px-4 text-center">Status Validasi</th>
                         <th className="py-3 px-4">Keterangan / Pesan</th>
                       </tr>
@@ -1527,11 +1542,13 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                               </td>
 
                               <td className="py-3 px-4">
-                                <div className="font-mono font-bold text-slate-800">
-                                  {r.regNumber}
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono font-bold text-xs text-blue-900 bg-blue-100/80 px-2 py-0.5 rounded border border-blue-300">
+                                    NISN: {r.nisn}
+                                  </span>
                                 </div>
-                                <div className="text-[11px] text-slate-500 font-mono">
-                                  NISN: {r.nisn}
+                                <div className="text-[10px] text-slate-500 font-mono mt-1">
+                                  No. Reg: {r.regNumber}
                                 </div>
                               </td>
 
@@ -1582,6 +1599,31 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                                 ) : (
                                   <span className="px-2 py-0.5 rounded font-bold text-xs bg-rose-100 text-rose-800 font-mono">
                                     {String(r.rawScore || '(kosong)')}
+                                  </span>
+                                )}
+                              </td>
+
+                              <td className="py-3 px-4 text-center">
+                                {r.matchMethod === 'NISN' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                    <Check className="w-3 h-3" />
+                                    <span>Cocok via NISN</span>
+                                  </span>
+                                ) : r.matchMethod === 'REG_NUMBER' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
+                                    <span>Cocok via No. Reg</span>
+                                  </span>
+                                ) : r.matchMethod === 'EMAIL' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                    <span>Cocok via Email</span>
+                                  </span>
+                                ) : r.matchMethod === 'NAME' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-200">
+                                    <span>Cocok via Nama</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                    <span>NISN Belum Terdaftar</span>
                                   </span>
                                 )}
                               </td>
