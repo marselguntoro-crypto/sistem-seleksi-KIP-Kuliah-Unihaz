@@ -20,7 +20,9 @@ import {
   Sliders,
   Shield,
   Database,
-  Lock
+  Lock,
+  Share2,
+  ExternalLink
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -432,6 +434,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span>Laporan Seleksi</span>
                 </div>
                 {!hasPermission('view-reports') && <Lock className="w-3 h-3 text-blue-400/50 shrink-0" />}
+              </button>
+            </div>
+          </div>
+
+          {/* PORTAL PUBLIK & PENGUMUMAN */}
+          <div className="mb-3">
+            <div className="px-4 py-1 text-blue-300 uppercase text-[10px] font-bold tracking-wider flex items-center justify-between">
+              <span>PORTAL PUBLIK</span>
+              <span className="text-[9px] text-emerald-400 font-semibold">LIVE</span>
+            </div>
+            <div className="space-y-0.5">
+              <button
+                id="sidebar-link-live-ranking"
+                onClick={() => handleLinkClick('live-ranking', undefined, 'Live Ranking Publik')}
+                className={`w-full flex items-center justify-between px-4 py-2 transition-colors ${
+                  activeRoute === 'live-ranking'
+                    ? 'bg-blue-900 border-l-4 border-yellow-400 text-white font-semibold cursor-pointer'
+                    : 'text-amber-300 hover:bg-blue-800 hover:text-white cursor-pointer'
+                }`}
+              >
+                <div className="flex items-center">
+                  <Share2 className="w-4 h-4 mr-3 text-amber-400 shrink-0" />
+                  <div className="flex flex-col text-left">
+                    <span>Live Ranking Publik</span>
+                    <span className="text-[9px] text-amber-200/80 font-normal">Tautan Bagikan Terbuka</span>
+                  </div>
+                </div>
+                <ExternalLink className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               </button>
             </div>
           </div>

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { User, AcademicYear } from '../types';
-import { Menu, LogOut, Code, CheckCircle2, ChevronDown, User as UserIcon, Mail, Shield } from 'lucide-react';
+import { Menu, LogOut, Code, CheckCircle2, ChevronDown, User as UserIcon, Mail, Shield, Share2 } from 'lucide-react';
 
 interface NavbarProps {
   currentUser: User | null;
@@ -11,6 +11,7 @@ interface NavbarProps {
   onToggleSidebar: () => void;
   activeTab: 'dashboard' | 'tests' | 'code';
   setActiveTab: (tab: 'dashboard' | 'tests' | 'code') => void;
+  onOpenLiveRanking?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -21,7 +22,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenTestRunner,
   onToggleSidebar,
   activeTab,
-  setActiveTab
+  setActiveTab,
+  onOpenLiveRanking
 }) => {
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -112,6 +114,18 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right: User Profile & Actions */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {onOpenLiveRanking && (
+            <button
+              id="btn-navbar-live-ranking"
+              onClick={onOpenLiveRanking}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-bold text-xs transition-all shadow-xs hover:shadow-md cursor-pointer"
+              title="Buka tampilan Pengumuman & Live Ranking Publik untuk dibagikan"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Live Ranking Publik</span>
+            </button>
+          )}
+
           {currentUser && (
             <div className="relative" ref={dropdownRef}>
               <button

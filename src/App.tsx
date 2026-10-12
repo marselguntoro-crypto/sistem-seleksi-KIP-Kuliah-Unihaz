@@ -54,6 +54,7 @@ import { OperatorsView } from './components/admin/OperatorsView';
 import { AuditLogsView } from './components/admin/AuditLogsView';
 import { SelectionWeightsView } from './components/admin/SelectionWeightsView';
 import { BackupRestoreView } from './components/admin/BackupRestoreView';
+import { PublicLiveRankingView } from './components/public/PublicLiveRankingView';
 import { AlertCircle, CheckCircle2, X } from 'lucide-react';
 
 export default function App() {
@@ -75,6 +76,66 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
+
+  // Public Live Ranking URL Detection (?view=live-ranking, #/live-ranking, etc.)
+  const [isPublicLiveView, setIsPublicLiveView] = useState<boolean>(() => {
+    try {
+      const search = window.location.search;
+      const hash = window.location.hash;
+      return (
+        search.includes('view=live-ranking') ||
+        search.includes('live=true') ||
+        search.includes('ranking=live') ||
+        hash.includes('live-ranking') ||
+        hash.includes('ranking-live')
+      );
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const search = window.location.search;
+      const hash = window.location.hash;
+      const shouldShowLive =
+        search.includes('view=live-ranking') ||
+        search.includes('live=true') ||
+        search.includes('ranking=live') ||
+        hash.includes('live-ranking') ||
+        hash.includes('ranking-live');
+      setIsPublicLiveView(shouldShowLive);
+    };
+
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
+    };
+  }, []);
+
+  const handleOpenLiveRanking = () => {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', 'live-ranking');
+      window.history.pushState({}, '', url.toString());
+    } catch {
+      window.location.hash = '/live-ranking';
+    }
+    setIsPublicLiveView(true);
+  };
+
+  const handleCloseLiveRanking = () => {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('view');
+      window.history.pushState({}, '', url.pathname);
+    } catch {
+      window.location.hash = '';
+    }
+    setIsPublicLiveView(false);
+  };
 
   // Phase 2 State: Master Data & Participants
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>(INITIAL_ACADEMIC_YEARS);
@@ -775,11 +836,35 @@ export default function App() {
     };
   }, [participants, activeAcademicYear, activeYearParticipants]);
 
-  // If logged out, render the authentic Laravel Login page
+  // 1. If public live ranking is active or accessed via link, render PublicLiveRankingView!
+  // (Accessible by EVERYONE without requiring login!)
+  if (isPublicLiveView || activeRoute === 'live-ranking') {
+    return (
+      <PublicLiveRankingView
+        participants={activeYearParticipants}
+        studyPrograms={studyPrograms}
+        academicYears={academicYears}
+        faculties={faculties}
+        weights={weights}
+        currentUser={currentUser}
+        onBackToDashboard={() => {
+          handleCloseLiveRanking();
+          setActiveRoute('dashboard');
+        }}
+        onGoToLogin={() => {
+          handleCloseLiveRanking();
+          setCurrentUser(null);
+        }}
+      />
+    );
+  }
+
+  // 2. If logged out, render the authentic Laravel Login page
   if (!currentUser) {
     return (
       <LoginView
         availableUsers={users}
+        onOpenLiveRanking={handleOpenLiveRanking}
         onLoginSuccess={(user) => {
           try {
             localStorage.setItem('unihaz_kipk_session_user', JSON.stringify(user));
@@ -813,6 +898,7 @@ export default function App() {
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        onOpenLiveRanking={handleOpenLiveRanking}
       />
 
       <div className="flex flex-1">
@@ -823,9 +909,13 @@ export default function App() {
           onClose={() => setSidebarOpen(false)}
           activeRoute={activeRoute}
           onNavigate={(route) => {
-            setActiveRoute(route);
-            if (activeTab !== 'dashboard') {
-              setActiveTab('dashboard');
+            if (route === 'live-ranking') {
+              handleOpenLiveRanking();
+            } else {
+              setActiveRoute(route);
+              if (activeTab !== 'dashboard') {
+                setActiveTab('dashboard');
+              }
             }
           }}
           onRestrictedAttempt={handleRestrictedAttempt}

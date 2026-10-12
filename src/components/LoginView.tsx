@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { SEEDED_USERS } from '../data/mockData';
-import { ShieldCheck, Lock, User as UserIcon, AlertCircle, ArrowRight } from 'lucide-react';
+import { ShieldCheck, Lock, User as UserIcon, AlertCircle, ArrowRight, Award } from 'lucide-react';
 
 interface LoginViewProps {
   onLoginSuccess: (user: User) => void;
   availableUsers?: User[];
+  onOpenLiveRanking?: () => void;
 }
 
-export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, availableUsers = SEEDED_USERS }) => {
+export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, availableUsers = SEEDED_USERS, onOpenLiveRanking }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
@@ -163,11 +164,26 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, availableU
             </button>
           </form>
 
+          {/* Public Live Ranking Link for prospective students / public */}
+          {onOpenLiveRanking && (
+            <div className="mt-4 pt-3 border-t border-slate-150">
+              <button
+                id="btn-login-open-live-ranking"
+                type="button"
+                onClick={onOpenLiveRanking}
+                className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-amber-500/20 cursor-pointer"
+              >
+                <Award className="w-4 h-4 text-slate-950" />
+                <span>Lihat Pengumuman & Ranking Live (Publik)</span>
+              </button>
+            </div>
+          )}
+
           {/* Secure Institutional Access Note */}
-          <div className="mt-6 pt-4 border-t border-slate-100 flex items-center gap-2.5 text-slate-500 text-[11px] bg-slate-50 p-3 rounded-lg border">
+          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-2.5 text-slate-500 text-[11px] bg-slate-50 p-3 rounded-lg border">
             <ShieldCheck className="w-4 h-4 text-blue-700 shrink-0" />
             <p className="leading-tight">
-              Akses terbatas untuk panitia seleksi dan operator resmi Biro Administrasi UNIHAZ.
+              Akses login terbatas untuk panitia seleksi & operator Biro Administrasi UNIHAZ.
             </p>
           </div>
         </div>
