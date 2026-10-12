@@ -330,6 +330,13 @@ export function mapSupabaseParticipantToApp(row: SupabaseParticipantRow): Partic
     affirmationScore: row.affirmation_score ?? undefined,
     finalScore: row.final_score ?? undefined,
     selectionStatus: row.selection_status as any,
+    acceptedProdiId: (row as any).accepted_prodi_id ?? (
+      row.notes?.match(/\[Prodi Diterima:\s*(\d+)/i)?.[1] ? Number(row.notes.match(/\[Prodi Diterima:\s*(\d+)/i)![1]) :
+      row.notes?.match(/\[Prodi Diterima:\s*(CADANGAN|TIDAK[_\s]LOLOS)\]/i) ? -1 : undefined
+    ),
+    acceptedProdiName: (row as any).accepted_prodi_name ?? (
+      row.notes?.match(/\[Prodi Diterima:\s*(?:\d+\s*\|\s*)?([^\]]+)\]/i)?.[1]?.trim() ?? undefined
+    ),
     rank: row.rank ?? undefined,
     notes: row.notes || undefined,
     createdAt: row.created_at || new Date().toISOString(),

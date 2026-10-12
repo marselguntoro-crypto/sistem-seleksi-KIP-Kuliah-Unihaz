@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Participant, StudyProgram, AcademicYear, Faculty, User, SelectionWeights } from '../../types';
-import { calculateStage1Score, calculateParticipantFinalScore, getDesilAffirmationScore } from '../../utils/selectionUtils';
+import { calculateStage1Score, calculateParticipantFinalScore, getDesilAffirmationScore, extractAcceptedProdi } from '../../utils/selectionUtils';
 import {
   Award,
   Trophy,
@@ -150,6 +150,12 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
       const choice1 = findProdi(p.firstChoiceProdiId, p.firstChoiceProdiName);
       const choice2 = findProdi(p.secondChoiceProdiId, p.secondChoiceProdiName);
 
+      const acceptedInfo = extractAcceptedProdi(p, studyPrograms);
+      const manualProdi = acceptedInfo.id && acceptedInfo.id > 0
+        ? findProdi(acceptedInfo.id, acceptedInfo.name || undefined)
+        : null;
+      const isCadanganManual = acceptedInfo.id === -1;
+
       return {
         participant: p,
         utbkScore: utbk,
@@ -158,7 +164,11 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
         stage1Score,
         affirmationScore,
         choice1,
-        choice2
+        choice2,
+        acceptedInfo,
+        manualProdi,
+        isCadanganManual,
+        isManual: acceptedInfo.isManual
       };
     });
 
@@ -196,6 +206,50 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
           allocatedProdi: null,
           allocationReason: 'Nilai UTBK atau Wawancara belum diinput lengkap'
         };
+      }
+
+      // If manual cadangan
+      if (item.isCadanganManual) {
+        return {
+          ...item,
+          rank,
+          status: 'NO_QUOTA' as const,
+          allocatedProdi: null,
+          allocationReason: 'Ditetapkan manual ke daftar cadangan'
+        };
+      }
+
+      // If manual prodi assigned
+      if (item.manualProdi) {
+        const mp = item.manualProdi;
+        filledTotal[mp.id] = (filledTotal[mp.id] || 0) + 1;
+        if (c1 && mp.id === c1.id) {
+          filledP1[mp.id] = (filledP1[mp.id] || 0) + 1;
+          return {
+            ...item,
+            rank,
+            status: 'ACCEPTED_CHOICE_1' as const,
+            allocatedProdi: mp,
+            allocationReason: `Ditetapkan pada Pilihan 1: ${mp.name}`
+          };
+        } else if (c2 && mp.id === c2.id) {
+          filledP2[mp.id] = (filledP2[mp.id] || 0) + 1;
+          return {
+            ...item,
+            rank,
+            status: 'SHIFTED_CHOICE_2' as const,
+            allocatedProdi: mp,
+            allocationReason: `Dialihkan ke Pilihan 2: ${mp.name}`
+          };
+        } else {
+          return {
+            ...item,
+            rank,
+            status: 'MANUAL_ASSIGNED' as const,
+            allocatedProdi: mp,
+            allocationReason: `Dialihkan ke prodi khusus: ${mp.name}`
+          };
+        }
       }
 
       const c1Quota = c1 ? (c1.quota ?? 0) : 0;
@@ -259,6 +313,7 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
     const totalAssessed = candidates.filter((c) => c.isComplete).length;
     const totalP1 = candidates.filter((c) => c.status === 'ACCEPTED_CHOICE_1').length;
     const totalP2 = candidates.filter((c) => c.status === 'SHIFTED_CHOICE_2').length;
+    const totalManual = candidates.filter((c) => (c.status as string) === 'MANUAL_ASSIGNED').length;
     const totalNoQuota = candidates.filter((c) => c.status === 'NO_QUOTA').length;
     const totalQuota = pStats.reduce((acc, s) => acc + s.quota, 0);
     const totalFilled = pStats.reduce((acc, s) => acc + s.filledTotal, 0);
@@ -270,10 +325,11 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
         totalAssessed,
         totalP1,
         totalP2,
+        totalManual,
         totalNoQuota,
         totalQuota,
         totalFilled,
-        totalPassed: totalP1 + totalP2
+        totalPassed: totalP1 + totalP2 + totalManual
       }
     };
   }, [participants, studyPrograms, weights]);
@@ -355,7 +411,7 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
 
       const matchesStatus =
         statusFilter === 'ALL' ||
-        (statusFilter === 'LULUS_ALL' && (c.status === 'ACCEPTED_CHOICE_1' || c.status === 'SHIFTED_CHOICE_2')) ||
+        (statusFilter === 'LULUS_ALL' && (c.status === 'ACCEPTED_CHOICE_1' || c.status === 'SHIFTED_CHOICE_2' || (c.status as string) === 'MANUAL_ASSIGNED')) ||
         c.status === statusFilter;
 
       const matchesProdi =
@@ -687,6 +743,13 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
                       </span>
                     )}
 
+                    {(matchedApplicant.status as string) === 'MANUAL_ASSIGNED' && (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                        <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                        <span>PENETAPAN KHUSUS: {matchedApplicant.allocatedProdi?.name}</span>
+                      </span>
+                    )}
+
                     {matchedApplicant.status === 'NO_QUOTA' && (
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
                         <XCircle className="w-3.5 h-3.5 text-rose-400" />
@@ -881,6 +944,7 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
                   <>
                     <option value="ACCEPTED_CHOICE_1">Lulus Pilihan 1</option>
                     <option value="SHIFTED_CHOICE_2">Dialihkan ke Pilihan 2</option>
+                    <option value="MANUAL_ASSIGNED">Penetapan Khusus / Manual</option>
                     <option value="NO_QUOTA">Cadangan (Kuota Penuh)</option>
                     <option value="INCOMPLETE">Belum Lengkap</option>
                   </>
@@ -1107,6 +1171,17 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
                                   <ArrowLeftRight className="w-3.5 h-3.5" /> Dialihkan ke Pil 2
                                 </span>
                                 <span className="text-[11px] text-amber-300 font-medium">
+                                  ↳ {c.allocatedProdi?.name}
+                                </span>
+                              </div>
+                            )}
+
+                            {(c.status as string) === 'MANUAL_ASSIGNED' && (
+                              <div className="flex flex-col">
+                                <span className="inline-flex items-center gap-1 font-bold text-purple-400 text-xs">
+                                  <Sparkles className="w-3.5 h-3.5" /> Penetapan Khusus
+                                </span>
+                                <span className="text-[11px] text-purple-300 font-medium">
                                   ↳ {c.allocatedProdi?.name}
                                 </span>
                               </div>

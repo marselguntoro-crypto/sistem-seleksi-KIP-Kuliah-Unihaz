@@ -1,4 +1,4 @@
-import { Participant, SelectionWeights, DesilCategory, DocumentRequirement } from '../types';
+import { Participant, SelectionWeights, DesilCategory, DocumentRequirement, StudyProgram } from '../types';
 
 export const STANDARD_DOCUMENT_REQUIREMENTS: DocumentRequirement[] = [
   {
@@ -130,4 +130,114 @@ export const calculateStage1Score = (
     combinedWeight;
 
   return Math.round(score * 100) / 100;
+};
+
+export interface AcceptedProdiInfo {
+  id: number | null; // null: Auto/System, -1: Cadangan, >0: StudyProgram ID
+  name: string | null;
+  isManual: boolean;
+}
+
+/**
+ * Ekstraksi informasi prodi diterima dari participant, baik dari properti langsung
+ * maupun dari catatan (notes) terformat [Prodi Diterima: ...].
+ */
+export const extractAcceptedProdi = (
+  p: Participant,
+  studyPrograms: StudyProgram[] = []
+): AcceptedProdiInfo => {
+  // 1. Direct property check on Participant
+  if (p.acceptedProdiId !== undefined && p.acceptedProdiId !== null) {
+    if (p.acceptedProdiId === -1) {
+      return { id: -1, name: 'Cadangan (Tidak Lolos Kuota)', isManual: true };
+    }
+    const found = studyPrograms.find((sp) => sp.id === p.acceptedProdiId);
+    return {
+      id: p.acceptedProdiId,
+      name: p.acceptedProdiName || found?.name || `Prodi ID #${p.acceptedProdiId}`,
+      isManual: true
+    };
+  }
+
+  // 2. Fallback: Parse from notes string tag [Prodi Diterima: ...]
+  if (p.notes) {
+    const cadanganMatch = p.notes.match(/\[Prodi Diterima:\s*(CADANGAN|TIDAK[_\s]LOLOS)\]/i);
+    if (cadanganMatch) {
+      return { id: -1, name: 'Cadangan (Tidak Lolos Kuota)', isManual: true };
+    }
+
+    const idNameMatch = p.notes.match(/\[Prodi Diterima:\s*(\d+)\s*\|\s*([^\]]+)\]/i);
+    if (idNameMatch) {
+      const id = parseInt(idNameMatch[1], 10);
+      const name = idNameMatch[2].trim();
+      return { id, name, isManual: true };
+    }
+
+    const nameMatch = p.notes.match(/\[Prodi Diterima:\s*([^\]]+)\]/i);
+    if (nameMatch) {
+      const raw = nameMatch[1].trim();
+      if (raw.toUpperCase() === 'CADANGAN' || raw.toUpperCase() === 'TIDAK LOLOS') {
+        return { id: -1, name: 'Cadangan (Tidak Lolos Kuota)', isManual: true };
+      }
+      const clean = raw.toLowerCase();
+      const stripped = clean.replace(/^(s1|d3|s2)\s+/, '').trim();
+      const found = studyPrograms.find((sp) => {
+        const spClean = sp.name.toLowerCase();
+        const spStripped = spClean.replace(/^(s1|d3|s2)\s+/, '').trim();
+        return spClean === clean || spStripped === stripped;
+      });
+      return {
+        id: found ? found.id : 0,
+        name: found ? found.name : raw,
+        isManual: true
+      };
+    }
+  }
+
+  return { id: null, name: null, isManual: false };
+};
+
+/**
+ * Terapkan penetapan/override prodi diterima ke objek Participant.
+ * Menyimpan status ke properti dan menanamkan tag aman ke notes.
+ */
+export const applyAcceptedProdiToParticipant = (
+  p: Participant,
+  prodi: StudyProgram | null | 'CADANGAN' | 'AUTO',
+  customReason?: string
+): Participant => {
+  let acceptedProdiId: number | null = null;
+  let acceptedProdiName: string | null = null;
+  let tag = '';
+
+  if (prodi === 'AUTO') {
+    acceptedProdiId = null;
+    acceptedProdiName = null;
+    tag = '';
+  } else if (prodi === 'CADANGAN') {
+    acceptedProdiId = -1;
+    acceptedProdiName = 'Cadangan (Tidak Lolos Kuota)';
+    tag = '[Prodi Diterima: CADANGAN]';
+  } else if (prodi) {
+    acceptedProdiId = prodi.id;
+    acceptedProdiName = prodi.name;
+    tag = `[Prodi Diterima: ${prodi.id}|${prodi.name}]`;
+  }
+
+  // Bersihkan tag lama dari notes
+  const cleanNotes = (p.notes || '').replace(/\[Prodi Diterima:[^\]]+\]\s*/gi, '').trim();
+
+  let finalNotes = cleanNotes;
+  if (tag) {
+    const reasonText = customReason ? ` (${customReason.trim()})` : '';
+    finalNotes = `${tag}${reasonText} ${cleanNotes}`.trim();
+  }
+
+  return {
+    ...p,
+    acceptedProdiId,
+    acceptedProdiName,
+    notes: finalNotes || undefined,
+    updatedAt: new Date().toISOString()
+  };
 };

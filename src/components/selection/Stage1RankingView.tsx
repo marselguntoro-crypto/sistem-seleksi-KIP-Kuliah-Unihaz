@@ -1,7 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { Participant, StudyProgram, AcademicYear, Faculty, User, SelectionWeights, SelectionStatus } from '../../types';
-import { calculateStage1Score, getDesilAffirmationScore, DEFAULT_SELECTION_WEIGHTS } from '../../utils/selectionUtils';
+import {
+  calculateStage1Score,
+  getDesilAffirmationScore,
+  DEFAULT_SELECTION_WEIGHTS,
+  extractAcceptedProdi,
+  applyAcceptedProdiToParticipant
+} from '../../utils/selectionUtils';
 import {
   Award,
   Search,
@@ -30,12 +36,14 @@ import {
   Save,
   ShieldCheck,
   Eye,
-  RotateCcw
+  RotateCcw,
+  Edit3
 } from 'lucide-react';
 
 export type Stage1AllocationStatus =
   | 'ACCEPTED_CHOICE_1'
   | 'SHIFTED_CHOICE_2'
+  | 'MANUAL_ASSIGNED'
   | 'NO_QUOTA'
   | 'INCOMPLETE';
 
@@ -50,6 +58,7 @@ export interface Stage1Candidate {
   choice2: StudyProgram | null;
   status: Stage1AllocationStatus;
   allocatedProdi: StudyProgram | null;
+  isManualAllocation?: boolean;
   allocationReason: string;
   choice1FilledAtTime: number;
   choice1Quota: number;
@@ -96,7 +105,7 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
 
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | Stage1AllocationStatus>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | Stage1AllocationStatus | 'MANUAL_ONLY'>('ALL');
   const [facultyFilter, setFacultyFilter] = useState<string>('ALL');
   const [prodiFilter, setProdiFilter] = useState<string>('ALL');
   const [desilFilter, setDesilFilter] = useState<string>('ALL');
@@ -122,6 +131,20 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
   const [targetStatusToApply, setTargetStatusToApply] = useState<SelectionStatus>('Lulus');
   const [isApplyingBatch, setIsApplyingBatch] = useState(false);
 
+  // Single Candidate Prodi Edit Modal State
+  const [editingCandidate, setEditingCandidate] = useState<Stage1Candidate | null>(null);
+  const [editProdiType, setEditProdiType] = useState<'AUTO' | 'CHOICE_1' | 'CHOICE_2' | 'OTHER' | 'CADANGAN'>('AUTO');
+  const [editOtherProdiId, setEditOtherProdiId] = useState<number | ''>('');
+  const [editProdiNote, setEditProdiNote] = useState<string>('');
+  const [isSavingCandidateProdi, setIsSavingCandidateProdi] = useState<boolean>(false);
+
+  // Batch Prodi Edit Modal State
+  const [isBatchProdiModalOpen, setIsBatchProdiModalOpen] = useState<boolean>(false);
+  const [batchProdiType, setBatchProdiType] = useState<'AUTO' | 'CHOICE_1' | 'CHOICE_2' | 'SPECIFIC' | 'CADANGAN'>('CHOICE_1');
+  const [batchSpecificProdiId, setBatchSpecificProdiId] = useState<number | ''>('');
+  const [batchProdiNote, setBatchProdiNote] = useState<string>('');
+  const [isApplyingBatchProdi, setIsApplyingBatchProdi] = useState<boolean>(false);
+
   // Reset simulated quotas if study programs change
   const handleResetQuotas = () => {
     const map: Record<number, number> = {};
@@ -129,6 +152,121 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
       map[sp.id] = sp.quota ?? 0;
     });
     setSimulatedQuotas(map);
+  };
+
+  const handleOpenEditProdi = (candidate: Stage1Candidate) => {
+    setEditingCandidate(candidate);
+    setEditProdiNote('');
+
+    if (candidate.isManualAllocation) {
+      if (candidate.status === 'NO_QUOTA') {
+        setEditProdiType('CADANGAN');
+        setEditOtherProdiId('');
+      } else if (candidate.allocatedProdi && candidate.choice1 && candidate.allocatedProdi.id === candidate.choice1.id) {
+        setEditProdiType('CHOICE_1');
+        setEditOtherProdiId('');
+      } else if (candidate.allocatedProdi && candidate.choice2 && candidate.allocatedProdi.id === candidate.choice2.id) {
+        setEditProdiType('CHOICE_2');
+        setEditOtherProdiId('');
+      } else if (candidate.allocatedProdi) {
+        setEditProdiType('OTHER');
+        setEditOtherProdiId(candidate.allocatedProdi.id);
+      } else {
+        setEditProdiType('AUTO');
+        setEditOtherProdiId('');
+      }
+    } else {
+      setEditProdiType('AUTO');
+      setEditOtherProdiId(studyPrograms[0]?.id || '');
+    }
+  };
+
+  const handleSaveCandidateProdi = async () => {
+    if (!editingCandidate) return;
+    setIsSavingCandidateProdi(true);
+    try {
+      let targetProdi: StudyProgram | null | 'CADANGAN' | 'AUTO' = 'AUTO';
+      let defaultReason = '';
+
+      if (editProdiType === 'AUTO') {
+        targetProdi = 'AUTO';
+      } else if (editProdiType === 'CADANGAN') {
+        targetProdi = 'CADANGAN';
+        defaultReason = 'Ditetapkan manual ke daftar cadangan';
+      } else if (editProdiType === 'CHOICE_1') {
+        targetProdi = editingCandidate.choice1;
+        defaultReason = `Ditetapkan manual pada Pilihan 1: ${editingCandidate.choice1?.name || ''}`;
+      } else if (editProdiType === 'CHOICE_2') {
+        targetProdi = editingCandidate.choice2;
+        defaultReason = `Dialihkan manual ke Pilihan 2: ${editingCandidate.choice2?.name || ''}`;
+      } else if (editProdiType === 'OTHER') {
+        const found = studyPrograms.find((sp) => sp.id === Number(editOtherProdiId)) || null;
+        targetProdi = found;
+        defaultReason = `Dialihkan manual ke prodi khusus: ${found?.name || ''}`;
+      }
+
+      const updated = applyAcceptedProdiToParticipant(
+        editingCandidate.participant,
+        targetProdi,
+        editProdiNote || defaultReason
+      );
+
+      await onUpdateParticipant(updated);
+      setEditingCandidate(null);
+    } catch (err) {
+      console.error('Error updating candidate prodi:', err);
+    } finally {
+      setIsSavingCandidateProdi(false);
+    }
+  };
+
+  const handleSaveBatchProdi = async () => {
+    if (!onBatchUpdateParticipants || selectedIds.length === 0) return;
+    setIsApplyingBatchProdi(true);
+    try {
+      const selectedCandidates = rankedCandidates.filter((c) => selectedIds.includes(c.participant.id));
+      const specificProdi = batchProdiType === 'SPECIFIC'
+        ? studyPrograms.find((sp) => sp.id === Number(batchSpecificProdiId)) || null
+        : null;
+
+      const updatedList: Participant[] = selectedCandidates.map((c) => {
+        let target: StudyProgram | null | 'CADANGAN' | 'AUTO' = 'AUTO';
+        let defaultReason = '';
+
+        if (batchProdiType === 'AUTO') {
+          target = 'AUTO';
+        } else if (batchProdiType === 'CADANGAN') {
+          target = 'CADANGAN';
+          defaultReason = 'Penetapan massal cadangan';
+        } else if (batchProdiType === 'CHOICE_1') {
+          target = c.choice1;
+          defaultReason = `Penetapan massal ke Pilihan 1 (${c.choice1?.name || c.participant.firstChoiceProdiName})`;
+        } else if (batchProdiType === 'CHOICE_2') {
+          target = c.choice2;
+          defaultReason = `Penetapan massal ke Pilihan 2 (${c.choice2?.name || c.participant.secondChoiceProdiName})`;
+        } else if (batchProdiType === 'SPECIFIC') {
+          target = specificProdi;
+          defaultReason = `Penetapan massal ke ${specificProdi?.name || ''}`;
+        }
+
+        return applyAcceptedProdiToParticipant(
+          c.participant,
+          target,
+          batchProdiNote || defaultReason
+        );
+      });
+
+      await onBatchUpdateParticipants(
+        updatedList,
+        `Berhasil memperbarui penetapan prodi diterima untuk ${updatedList.length} peserta terpilih.`
+      );
+      setIsBatchProdiModalOpen(false);
+      setSelectedIds([]);
+    } catch (err) {
+      console.error('Error applying batch prodi:', err);
+    } finally {
+      setIsApplyingBatchProdi(false);
+    }
   };
 
   // Helper map for prodi lookup
@@ -168,7 +306,7 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
   // CORE RANKING & QUOTA ALLOCATION ENGINE
   // -------------------------------------------------------------
   const { rankedCandidates, programStats, overallStats } = useMemo(() => {
-    // 1. Calculate each participant's Stage 1 Score
+    // 1. Calculate each participant's Stage 1 Score and extract manual accepted prodi
     const evaluatedList = participants.map((p) => {
       const utbk = Number(p.utbkScore) || 0;
       const interview = Number(p.interviewScore) || 0;
@@ -178,6 +316,12 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
       const affirmationScore = getDesilAffirmationScore(p.desil);
       const choice1 = findProdi(p.firstChoiceProdiId, p.firstChoiceProdiName);
       const choice2 = findProdi(p.secondChoiceProdiId, p.secondChoiceProdiName);
+      
+      const acceptedInfo = extractAcceptedProdi(p, studyPrograms);
+      const manualProdi = acceptedInfo.id && acceptedInfo.id > 0
+        ? findProdi(acceptedInfo.id, acceptedInfo.name || undefined)
+        : null;
+      const isCadanganManual = acceptedInfo.id === -1;
 
       return {
         participant: p,
@@ -187,7 +331,11 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
         stage1Score,
         affirmationScore,
         choice1,
-        choice2
+        choice2,
+        acceptedInfo,
+        manualProdi,
+        isCadanganManual,
+        isManual: acceptedInfo.isManual
       };
     });
 
@@ -246,6 +394,7 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
           choice2: c2,
           status: 'INCOMPLETE',
           allocatedProdi: null,
+          isManualAllocation: false,
           allocationReason: 'Nilai UTBK atau Wawancara belum diinput secara lengkap.',
           choice1FilledAtTime: c1 ? (filledTotalMap[c1.id] || 0) : 0,
           choice1Quota: c1 ? (simulatedQuotas[c1.id] ?? c1.quota ?? 0) : 0,
@@ -255,6 +404,73 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
         return;
       }
 
+      // Check if candidate has manual allocation
+      if (item.isCadanganManual) {
+        candidates.push({
+          participant: p,
+          rank,
+          stage1Score: item.stage1Score,
+          utbkScore: item.utbkScore,
+          interviewScore: item.interviewScore,
+          isComplete: true,
+          choice1: c1,
+          choice2: c2,
+          status: 'NO_QUOTA',
+          allocatedProdi: null,
+          isManualAllocation: true,
+          allocationReason: 'Ditetapkan secara manual sebagai daftar cadangan (tidak menerima kuota prodi di Tahap 1).',
+          choice1FilledAtTime: c1 ? (filledTotalMap[c1.id] || 0) : 0,
+          choice1Quota: c1 ? (simulatedQuotas[c1.id] ?? c1.quota ?? 0) : 0,
+          choice2FilledAtTime: c2 ? (filledTotalMap[c2.id] || 0) : 0,
+          choice2Quota: c2 ? (simulatedQuotas[c2.id] ?? c2.quota ?? 0) : 0
+        });
+        return;
+      }
+
+      if (item.manualProdi) {
+        const mp = item.manualProdi;
+        const newFilled = (filledTotalMap[mp.id] || 0) + 1;
+        filledTotalMap[mp.id] = newFilled;
+        const mpQuota = simulatedQuotas[mp.id] ?? mp.quota ?? 0;
+
+        let status: Stage1AllocationStatus = 'MANUAL_ASSIGNED';
+        let reason = `Ditetapkan secara manual pada prodi ${mp.name}`;
+
+        if (c1 && mp.id === c1.id) {
+          status = 'ACCEPTED_CHOICE_1';
+          filledChoice1Map[mp.id] = (filledChoice1Map[mp.id] || 0) + 1;
+          reason = `Ditetapkan secara manual pada Pilihan 1: ${mp.name} (Urutan ${newFilled}/${mpQuota})`;
+        } else if (c2 && mp.id === c2.id) {
+          status = 'SHIFTED_CHOICE_2';
+          filledChoice2Map[mp.id] = (filledChoice2Map[mp.id] || 0) + 1;
+          reason = `Dialihkan secara manual ke Pilihan 2: ${mp.name} (Urutan ${newFilled}/${mpQuota})`;
+        } else {
+          status = 'MANUAL_ASSIGNED';
+          reason = `Dialihkan secara manual ke Prodi Khusus: ${mp.name} (Urutan ${newFilled}/${mpQuota} - Rekomendasi/Kebijakan Panitia)`;
+        }
+
+        candidates.push({
+          participant: p,
+          rank,
+          stage1Score: item.stage1Score,
+          utbkScore: item.utbkScore,
+          interviewScore: item.interviewScore,
+          isComplete: true,
+          choice1: c1,
+          choice2: c2,
+          status,
+          allocatedProdi: mp,
+          isManualAllocation: true,
+          allocationReason: reason,
+          choice1FilledAtTime: c1 ? (filledTotalMap[c1.id] || 0) : 0,
+          choice1Quota: c1 ? (simulatedQuotas[c1.id] ?? c1.quota ?? 0) : 0,
+          choice2FilledAtTime: c2 ? (filledTotalMap[c2.id] || 0) : 0,
+          choice2Quota: c2 ? (simulatedQuotas[c2.id] ?? c2.quota ?? 0) : 0
+        });
+        return;
+      }
+
+      // Default: Automatic Quota Algorithm
       // Check Choice 1 Quota
       const c1Quota = c1 ? (simulatedQuotas[c1.id] ?? c1.quota ?? 0) : 0;
       const c1Filled = c1 ? (filledTotalMap[c1.id] || 0) : 0;
@@ -276,6 +492,7 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
           choice2: c2,
           status: 'ACCEPTED_CHOICE_1',
           allocatedProdi: c1,
+          isManualAllocation: false,
           allocationReason: `Lolos kuota Pilihan 1: ${c1.name} (Urutan ${newFilled} dari kuota ${c1Quota})`,
           choice1FilledAtTime: newFilled,
           choice1Quota: c1Quota,
@@ -305,6 +522,7 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
             choice2: c2,
             status: 'SHIFTED_CHOICE_2',
             allocatedProdi: c2,
+            isManualAllocation: false,
             allocationReason: `Kuota Pilihan 1 (${c1?.name || p.firstChoiceProdiName}) penuh (${c1Quota}/${c1Quota}). Dialihkan & lolos kuota Pilihan 2 (${c2.name}, Urutan ${newC2Filled}/${c2Quota})`,
             choice1FilledAtTime: c1Filled,
             choice1Quota: c1Quota,
@@ -328,6 +546,7 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
             choice2: c2,
             status: 'NO_QUOTA',
             allocatedProdi: null,
+            isManualAllocation: false,
             allocationReason: reasonText,
             choice1FilledAtTime: c1Filled,
             choice1Quota: c1Quota,
@@ -362,6 +581,7 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
     const totalAssessed = candidates.filter((c) => c.isComplete).length;
     const totalChoice1 = candidates.filter((c) => c.status === 'ACCEPTED_CHOICE_1').length;
     const totalShifted = candidates.filter((c) => c.status === 'SHIFTED_CHOICE_2').length;
+    const totalManual = candidates.filter((c) => c.isManualAllocation).length;
     const totalNoQuota = candidates.filter((c) => c.status === 'NO_QUOTA').length;
     const totalIncomplete = candidates.filter((c) => c.status === 'INCOMPLETE').length;
     const totalUniversityQuota = pStats.reduce((sum, s) => sum + s.quota, 0);
@@ -375,11 +595,12 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
         totalAssessed,
         totalChoice1,
         totalShifted,
+        totalManual,
         totalNoQuota,
         totalIncomplete,
         totalUniversityQuota,
         totalUniversityFilled,
-        qualifiedForSurvey: totalChoice1 + totalShifted
+        qualifiedForSurvey: candidates.filter((c) => c.allocatedProdi !== null).length
       }
     };
   }, [participants, studyPrograms, simulatedQuotas, weights]);
@@ -401,7 +622,14 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
         (p.schoolOrigin && p.schoolOrigin.toLowerCase().includes(search));
 
       // Status match
-      const matchesStatus = statusFilter === 'ALL' || cand.status === statusFilter;
+      let matchesStatus = true;
+      if (statusFilter !== 'ALL') {
+        if (statusFilter === 'MANUAL_ONLY') {
+          matchesStatus = !!cand.isManualAllocation;
+        } else {
+          matchesStatus = cand.status === statusFilter;
+        }
+      }
 
       // Complete scores only toggle
       const matchesComplete = !onlyCompleteScores || cand.isComplete;
@@ -454,9 +682,10 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
     const exportData = filteredCandidates.map((c) => {
       const p = c.participant;
       let statusLabel = 'Belum Lengkap';
-      if (c.status === 'ACCEPTED_CHOICE_1') statusLabel = 'Lulus Pilihan 1';
-      else if (c.status === 'SHIFTED_CHOICE_2') statusLabel = 'Dialihkan ke Pilihan 2';
-      else if (c.status === 'NO_QUOTA') statusLabel = 'Tidak Dapat Kuota (Cadangan)';
+      if (c.status === 'ACCEPTED_CHOICE_1') statusLabel = c.isManualAllocation ? 'Lulus Pilihan 1 (Manual)' : 'Lulus Pilihan 1';
+      else if (c.status === 'SHIFTED_CHOICE_2') statusLabel = c.isManualAllocation ? 'Dialihkan ke Pilihan 2 (Manual)' : 'Dialihkan ke Pilihan 2';
+      else if (c.status === 'MANUAL_ASSIGNED') statusLabel = 'Dialihkan ke Prodi Khusus (Manual)';
+      else if (c.status === 'NO_QUOTA') statusLabel = c.isManualAllocation ? 'Cadangan (Ditetapkan Manual)' : 'Tidak Dapat Kuota (Cadangan)';
 
       return {
         'Peringkat Tahap 1': c.rank,
@@ -475,8 +704,9 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
         'Status Penetapan Kuota': statusLabel,
         'Prodi Yang Diterima': c.allocatedProdi ? c.allocatedProdi.name : '-',
         'Fakultas Diterima': c.allocatedProdi?.facultyName || '-',
+        'Metode Alokasi': c.isManualAllocation ? 'Penetapan Manual / Khusus' : 'Otomatis (Sistem Kuota)',
         'Keterangan & Riwayat Alokasi': c.allocationReason,
-        'Kelayakan Survey Lapangan': c.status === 'ACCEPTED_CHOICE_1' || c.status === 'SHIFTED_CHOICE_2' ? 'Berhak Survey' : 'Cadangan / Pending'
+        'Kelayakan Survey Lapangan': c.allocatedProdi ? 'Berhak Survey' : 'Cadangan / Pending'
       };
     });
 
@@ -485,8 +715,8 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
     const wscols = [
       { wch: 10 }, { wch: 16 }, { wch: 14 }, { wch: 25 }, { wch: 22 },
       { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 24 },
-      { wch: 10 }, { wch: 24 }, { wch: 10 }, { wch: 24 }, { wch: 24 },
-      { wch: 24 }, { wch: 45 }, { wch: 20 }
+      { wch: 10 }, { wch: 24 }, { wch: 10 }, { wch: 26 }, { wch: 24 },
+      { wch: 24 }, { wch: 24 }, { wch: 45 }, { wch: 20 }
     ];
     ws['!cols'] = wscols;
 
@@ -505,7 +735,7 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
 
     try {
       const candidatesToUpdate = batchActionType === 'QUALIFIED_ONLY'
-        ? rankedCandidates.filter((c) => c.status === 'ACCEPTED_CHOICE_1' || c.status === 'SHIFTED_CHOICE_2')
+        ? rankedCandidates.filter((c) => c.status === 'ACCEPTED_CHOICE_1' || c.status === 'SHIFTED_CHOICE_2' || c.status === 'MANUAL_ASSIGNED')
         : rankedCandidates.filter((c) => selectedIds.includes(c.participant.id));
 
       if (candidatesToUpdate.length === 0) {
@@ -515,13 +745,15 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
       }
 
       const updatedList: Participant[] = candidatesToUpdate.map((c) => {
-        const notePrefix = `[Tahap 1: ${c.status === 'ACCEPTED_CHOICE_1' ? 'Lolos Pil 1' : 'Dialihkan Pil 2'} - ${c.allocatedProdi?.name || 'Prodi'}]`;
-        const updatedNotes = c.participant.notes
-          ? `${notePrefix} ${c.participant.notes}`
-          : `${notePrefix} Nilai UTBK: ${c.utbkScore}, Wawancara: ${c.interviewScore}, Total: ${c.stage1Score}`;
+        const prodiNoteTag = c.allocatedProdi ? `[Prodi Diterima: ${c.allocatedProdi.id}|${c.allocatedProdi.name}]` : '';
+        const notePrefix = `[Tahap 1: ${c.status === 'ACCEPTED_CHOICE_1' ? 'Lolos Pil 1' : c.status === 'SHIFTED_CHOICE_2' ? 'Dialihkan Pil 2' : 'Penetapan Khusus'} - ${c.allocatedProdi?.name || 'Prodi'}]`;
+        const cleanNotes = (c.participant.notes || '').replace(/\[Prodi Diterima:[^\]]+\]\s*/gi, '').trim();
+        const updatedNotes = `${prodiNoteTag} ${notePrefix} ${cleanNotes}`.trim();
 
         return {
           ...c.participant,
+          acceptedProdiId: c.allocatedProdi ? c.allocatedProdi.id : null,
+          acceptedProdiName: c.allocatedProdi ? c.allocatedProdi.name : null,
           selectionStatus: targetStatusToApply,
           notes: updatedNotes
         };
@@ -640,7 +872,7 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
       {/* ============================================================ */}
       {/* 2. STATS OVERVIEW CARDS */}
       {/* ============================================================ */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3.5">
         {/* Total Peserta */}
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
@@ -717,6 +949,22 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
             </div>
             <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">
               Pil 1 Penuh, Masuk Pil 2
+            </div>
+          </div>
+        </div>
+
+        {/* Penetapan Manual */}
+        <div className="bg-purple-50 dark:bg-purple-950/30 p-4 rounded-xl border border-purple-200 dark:border-purple-800/50 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between text-purple-700 dark:text-purple-300 text-xs font-medium">
+            <span>Penetapan Manual</span>
+            <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+          </div>
+          <div className="mt-2">
+            <div className="text-2xl font-black text-purple-700 dark:text-purple-300">
+              {overallStats.totalManual}
+            </div>
+            <div className="text-[11px] text-purple-600 dark:text-purple-400 mt-0.5">
+              Prodi Khusus / Disesuaikan
             </div>
           </div>
         </div>
@@ -876,6 +1124,8 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
               <option value="ALL">Semua Status Kuota</option>
               <option value="ACCEPTED_CHOICE_1">Lulus Pilihan 1 (Utama)</option>
               <option value="SHIFTED_CHOICE_2">Dialihkan ke Pilihan 2</option>
+              <option value="MANUAL_ASSIGNED">Dialihkan ke Prodi Khusus</option>
+              <option value="MANUAL_ONLY">Semua Penetapan Manual</option>
               <option value="NO_QUOTA">Tidak Lolos Kuota (Cadangan)</option>
               <option value="INCOMPLETE">Nilai Belum Lengkap</option>
             </select>
@@ -979,10 +1229,26 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-slate-500 dark:text-slate-400">
               Menampilkan <strong className="text-slate-900 dark:text-white">{filteredCandidates.length}</strong> dari {rankedCandidates.length} pendaftar
             </span>
+
+            {selectedIds.length > 0 && onBatchUpdateParticipants && (
+              <button
+                id="btn-open-batch-prodi"
+                onClick={() => {
+                  setBatchProdiType('CHOICE_1');
+                  setBatchSpecificProdiId(studyPrograms[0]?.id || '');
+                  setBatchProdiNote('');
+                  setIsBatchProdiModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs transition-colors shadow-xs cursor-pointer"
+              >
+                <GraduationCap className="w-3.5 h-3.5" />
+                <span>Ubah Prodi ({selectedIds.length} Siswa Terpilih)</span>
+              </button>
+            )}
 
             {onBatchUpdateParticipants && (
               <button
@@ -1076,46 +1342,128 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
 
                   // Allocation Badge styling
                   let statusBadge = (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                      <Clock className="w-3 h-3" />
-                      <span>Belum Lengkap</span>
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 w-fit">
+                        <Clock className="w-3 h-3" />
+                        <span>Belum Lengkap</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditProdi(cand)}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline w-fit cursor-pointer"
+                      >
+                        <GraduationCap className="w-3 h-3" />
+                        <span>Tetapkan Prodi</span>
+                      </button>
+                    </div>
                   );
 
                   if (cand.status === 'ACCEPTED_CHOICE_1') {
                     statusBadge = (
-                      <div className="flex flex-col gap-0.5">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border border-emerald-300/50 dark:border-emerald-700/50">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                          <span>Lulus Pilihan 1</span>
-                        </span>
-                        <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 px-1">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border border-emerald-300/50 dark:border-emerald-700/50">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                            <span>Lulus Pilihan 1</span>
+                          </span>
+                          {cand.isManualAllocation && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                              <Sparkles className="w-2.5 h-2.5" />
+                              Manual
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 px-0.5">
                           ↳ {cand.allocatedProdi?.name}
                         </span>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditProdi(cand)}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline w-fit cursor-pointer"
+                        >
+                          <Sliders className="w-3 h-3" />
+                          <span>Ubah Prodi</span>
+                        </button>
                       </div>
                     );
                   } else if (cand.status === 'SHIFTED_CHOICE_2') {
                     statusBadge = (
-                      <div className="flex flex-col gap-0.5">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-300/50 dark:border-amber-700/50">
-                          <ArrowLeftRight className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                          <span>Dialihkan ke Pil 2</span>
-                        </span>
-                        <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 px-1">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-300/50 dark:border-amber-700/50">
+                            <ArrowLeftRight className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                            <span>Dialihkan ke Pil 2</span>
+                          </span>
+                          {cand.isManualAllocation && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                              <Sparkles className="w-2.5 h-2.5" />
+                              Manual
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 px-0.5">
                           ↳ {cand.allocatedProdi?.name}
                         </span>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditProdi(cand)}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline w-fit cursor-pointer"
+                        >
+                          <Sliders className="w-3 h-3" />
+                          <span>Ubah Prodi</span>
+                        </button>
+                      </div>
+                    );
+                  } else if (cand.status === 'MANUAL_ASSIGNED') {
+                    statusBadge = (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 dark:bg-purple-950/70 text-purple-800 dark:text-purple-300 border border-purple-300/50 dark:border-purple-700/50">
+                            <Sparkles className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                            <span>Prodi Khusus</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-200 text-purple-900 dark:bg-purple-900 dark:text-purple-200">
+                            Manual
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-semibold text-purple-700 dark:text-purple-300 px-0.5">
+                          ↳ {cand.allocatedProdi?.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditProdi(cand)}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline w-fit cursor-pointer"
+                        >
+                          <Sliders className="w-3 h-3" />
+                          <span>Ubah Prodi</span>
+                        </button>
                       </div>
                     );
                   } else if (cand.status === 'NO_QUOTA') {
                     statusBadge = (
-                      <div className="flex flex-col gap-0.5">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 dark:bg-rose-950/70 text-rose-800 dark:text-rose-300 border border-rose-300/50 dark:border-rose-700/50">
-                          <XCircle className="w-3 h-3 text-rose-600 dark:text-rose-400" />
-                          <span>Tidak Lolos Kuota</span>
-                        </span>
-                        <span className="text-[11px] text-slate-500 dark:text-slate-400 px-1">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 dark:bg-rose-950/70 text-rose-800 dark:text-rose-300 border border-rose-300/50 dark:border-rose-700/50">
+                            <XCircle className="w-3 h-3 text-rose-600 dark:text-rose-400" />
+                            <span>Tidak Lolos Kuota</span>
+                          </span>
+                          {cand.isManualAllocation && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-200 text-rose-800 dark:bg-rose-900/60 dark:text-rose-300">
+                              Cadangan Manual
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 px-0.5">
                           (Daftar Cadangan)
                         </span>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditProdi(cand)}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline w-fit cursor-pointer"
+                        >
+                          <GraduationCap className="w-3 h-3" />
+                          <span>Tetapkan Prodi Diterima</span>
+                        </button>
                       </div>
                     );
                   }
@@ -1238,13 +1586,22 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
 
                       {/* Action */}
                       <td className="py-3 px-3 text-center">
-                        <button
-                          onClick={() => setSelectedCandidate(cand)}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors"
-                          title="Lihat rincian kalkulasi dan alokasi"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => handleOpenEditProdi(cand)}
+                            className="p-1.5 rounded-lg text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                            title="Ubah / Tetapkan Prodi Diterima"
+                          >
+                            <GraduationCap className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setSelectedCandidate(cand)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                            title="Lihat rincian kalkulasi dan alokasi"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1351,6 +1708,31 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
                 </div>
               </div>
 
+              {/* Penetapan Prodi Diterima */}
+              <div className="p-3.5 rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/70 dark:bg-indigo-950/40 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                    <GraduationCap className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    Status Prodi Diterima:
+                  </span>
+                  {selectedCandidate.isManualAllocation && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                      Penetapan Manual
+                    </span>
+                  )}
+                </div>
+                <div className="text-sm font-black text-indigo-900 dark:text-indigo-100">
+                  {selectedCandidate.allocatedProdi ? selectedCandidate.allocatedProdi.name : (
+                    selectedCandidate.allocationStatus === 'CADANGAN' ? 'Daftar Cadangan (Tidak Lolos Kuota)' : 'Belum Ditentukan'
+                  )}
+                </div>
+                {selectedCandidate.participant.notes && (
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400 italic">
+                    Catatan: {selectedCandidate.participant.notes}
+                  </p>
+                )}
+              </div>
+
               <div className="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-200 space-y-1">
                 <div className="font-bold flex items-center gap-1.5">
                   <Info className="w-4 h-4 text-blue-600 dark:text-blue-400" />
@@ -1362,7 +1744,18 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
               </div>
             </div>
 
-            <div className="pt-2 flex justify-end">
+            <div className="pt-2 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
+              <button
+                onClick={() => {
+                  const targetCand = selectedCandidate;
+                  setSelectedCandidate(null);
+                  handleOpenEditProdi(targetCand);
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Ubah Prodi Diterima</span>
+              </button>
               <button
                 onClick={() => setSelectedCandidate(null)}
                 className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-white text-xs font-semibold cursor-pointer"
@@ -1645,6 +2038,482 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
                 className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
               >
                 Terapkan Bobot
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* 10. MODAL: EDIT / TETAPKAN PRODI DITERIMA (PERORANGAN) */}
+      {/* ============================================================ */}
+      {editingCandidate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400">
+                  <GraduationCap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Tetapkan Prodi Diterima
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {editingCandidate.participant.name} ({editingCandidate.participant.registrationNumber || 'No. Reg -'})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingCandidate(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Candidate Summary Card */}
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-2 text-xs">
+              <div className="grid grid-cols-3 gap-2 pb-2 border-b border-slate-200 dark:border-slate-700/60 text-center">
+                <div>
+                  <span className="text-[11px] text-slate-500">Nilai UTBK</span>
+                  <div className="font-bold text-slate-900 dark:text-white">{editingCandidate.utbkScore.toFixed(1)}</div>
+                </div>
+                <div>
+                  <span className="text-[11px] text-slate-500">Nilai Wawancara</span>
+                  <div className="font-bold text-slate-900 dark:text-white">{editingCandidate.interviewScore.toFixed(1)}</div>
+                </div>
+                <div>
+                  <span className="text-[11px] text-slate-500">Skor Tahap 1</span>
+                  <div className="font-black text-blue-600 dark:text-blue-400">{editingCandidate.stage1Score.toFixed(2)}</div>
+                </div>
+              </div>
+              <div className="space-y-1 text-[11px]">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Pilihan 1:</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    {editingCandidate.choice1 ? editingCandidate.choice1.name : (editingCandidate.participant.firstChoiceProdiName || '-')}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Pilihan 2:</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    {editingCandidate.choice2 ? editingCandidate.choice2.name : (editingCandidate.participant.secondChoiceProdiName || '-')}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Radio Options */}
+            <div className="space-y-3 text-xs">
+              <label className="font-bold text-slate-800 dark:text-slate-200 block">
+                Pilih Kebijakan / Opsi Prodi Diterima:
+              </label>
+
+              {/* AUTO */}
+              <label className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                editProdiType === 'AUTO'
+                  ? 'border-blue-500 bg-blue-50/70 dark:bg-blue-950/40 ring-1 ring-blue-500'
+                  : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+              }`}>
+                <input
+                  type="radio"
+                  name="editProdiOption"
+                  checked={editProdiType === 'AUTO'}
+                  onChange={() => setEditProdiType('AUTO')}
+                  className="mt-0.5 text-blue-600 focus:ring-blue-500"
+                />
+                <div className="space-y-0.5">
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    Otomatis Sistem (Berdasarkan Kuota & Ranking)
+                  </span>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Mengikuti evaluasi kuota bertingkat standar: diprioritaskan di Pilihan 1, dialihkan ke Pilihan 2 jika Pil 1 penuh, atau status Cadangan jika kedua prodi penuh.
+                  </p>
+                </div>
+              </label>
+
+              {/* CHOICE 1 */}
+              <label className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                editProdiType === 'CHOICE_1'
+                  ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 ring-1 ring-emerald-500'
+                  : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+              }`}>
+                <input
+                  type="radio"
+                  name="editProdiOption"
+                  checked={editProdiType === 'CHOICE_1'}
+                  onChange={() => setEditProdiType('CHOICE_1')}
+                  className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                />
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      Tetapkan ke Pilihan 1
+                    </span>
+                    <span className="px-1.5 py-0.2 text-[10px] rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-semibold">
+                      Pil 1
+                    </span>
+                  </div>
+                  <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">
+                    {editingCandidate.choice1 ? editingCandidate.choice1.name : editingCandidate.participant.firstChoiceProdiName}
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Penetapan manual pasti ke pilihan pertama, mengabaikan batasan peringkat otomatis.
+                  </p>
+                </div>
+              </label>
+
+              {/* CHOICE 2 */}
+              <label className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${
+                !editingCandidate.choice2 && !editingCandidate.participant.secondChoiceProdiName
+                  ? 'opacity-50 cursor-not-allowed border-slate-200 dark:border-slate-800'
+                  : editProdiType === 'CHOICE_2'
+                  ? 'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/40 ring-1 ring-indigo-500 cursor-pointer'
+                  : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer'
+              }`}>
+                <input
+                  type="radio"
+                  name="editProdiOption"
+                  disabled={!editingCandidate.choice2 && !editingCandidate.participant.secondChoiceProdiName}
+                  checked={editProdiType === 'CHOICE_2'}
+                  onChange={() => setEditProdiType('CHOICE_2')}
+                  className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+                />
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      Alihkan ke Pilihan 2
+                    </span>
+                    <span className="px-1.5 py-0.2 text-[10px] rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-semibold">
+                      Pil 2
+                    </span>
+                  </div>
+                  <p className="text-xs font-semibold text-indigo-800 dark:text-indigo-300">
+                    {editingCandidate.choice2 ? editingCandidate.choice2.name : (editingCandidate.participant.secondChoiceProdiName || 'Tidak memilih pilihan 2')}
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Penetapan manual pasti dialihkan ke pilihan kedua peserta.
+                  </p>
+                </div>
+              </label>
+
+              {/* OTHER PRODI */}
+              <label className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                editProdiType === 'OTHER'
+                  ? 'border-purple-500 bg-purple-50/70 dark:bg-purple-950/40 ring-1 ring-purple-500'
+                  : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+              }`}>
+                <input
+                  type="radio"
+                  name="editProdiOption"
+                  checked={editProdiType === 'OTHER'}
+                  onChange={() => setEditProdiType('OTHER')}
+                  className="mt-0.5 text-purple-600 focus:ring-purple-500"
+                />
+                <div className="space-y-2 flex-1">
+                  <div>
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      Alihkan ke Program Studi Lain / Khusus
+                    </span>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Tentukan program studi penerima secara bebas di luar pilihan 1 dan 2 peserta.
+                    </p>
+                  </div>
+
+                  {editProdiType === 'OTHER' && (
+                    <div className="pt-1.5">
+                      <select
+                        value={editOtherProdiId}
+                        onChange={(e) => setEditOtherProdiId(e.target.value ? Number(e.target.value) : '')}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500"
+                      >
+                        {studyPrograms.map((sp) => (
+                          <option key={sp.id} value={sp.id}>
+                            {sp.name} ({sp.facultyName || sp.degree} • Kuota: {sp.quota})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              </label>
+
+              {/* CADANGAN */}
+              <label className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                editProdiType === 'CADANGAN'
+                  ? 'border-amber-500 bg-amber-50/70 dark:bg-amber-950/40 ring-1 ring-amber-500'
+                  : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+              }`}>
+                <input
+                  type="radio"
+                  name="editProdiOption"
+                  checked={editProdiType === 'CADANGAN'}
+                  onChange={() => setEditProdiType('CADANGAN')}
+                  className="mt-0.5 text-amber-600 focus:ring-amber-500"
+                />
+                <div className="space-y-0.5">
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    Tetapkan Manual sebagai Cadangan
+                  </span>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Peserta dinyatakan sebagai cadangan dan tidak menempati kursi kuota prodi mana pun.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {/* Catatan Tambahan */}
+            <div className="space-y-1.5 text-xs">
+              <label className="font-semibold text-slate-700 dark:text-slate-300">
+                Catatan / Alasan Penetapan (Opsional):
+              </label>
+              <input
+                type="text"
+                value={editProdiNote}
+                onChange={(e) => setEditProdiNote(e.target.value)}
+                placeholder="Misal: Rekomendasi pimpinan / kuota afirmasi / pengalihan prodi"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setEditingCandidate(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-white text-xs font-semibold cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isSavingCandidateProdi}
+                onClick={handleSaveCandidateProdi}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50"
+              >
+                {isSavingCandidateProdi ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Save className="w-3.5 h-3.5" />
+                )}
+                <span>{isSavingCandidateProdi ? 'Menyimpan...' : 'Simpan Penetapan'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* 11. MODAL: TETAPKAN PRODI DITERIMA MASSAL (BATCH) */}
+      {/* ============================================================ */}
+      {isBatchProdiModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+                  <GraduationCap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Tetapkan Prodi Diterima Massal
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Memperbarui penetapan untuk <strong className="text-indigo-600 dark:text-indigo-400">{selectedIds.length}</strong> peserta terpilih
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsBatchProdiModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Target Alert */}
+            <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 text-xs text-blue-800 dark:text-blue-300">
+              Penetapan prodi massal ini akan disimpan langsung ke data peserta dan memengaruhi alokasi kuota ranking Tahap 1.
+            </div>
+
+            {/* Radio Options */}
+            <div className="space-y-3 text-xs">
+              <label className="font-bold text-slate-800 dark:text-slate-200 block">
+                Pilih Aksi Penetapan Massal:
+              </label>
+
+              {/* BATCH CHOICE 1 */}
+              <label className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                batchProdiType === 'CHOICE_1'
+                  ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 ring-1 ring-emerald-500'
+                  : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+              }`}>
+                <input
+                  type="radio"
+                  name="batchProdiOption"
+                  checked={batchProdiType === 'CHOICE_1'}
+                  onChange={() => setBatchProdiType('CHOICE_1')}
+                  className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                />
+                <div className="space-y-0.5">
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    Tetapkan ke Pilihan 1 Masing-Masing Peserta
+                  </span>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Seluruh peserta terpilih akan ditetapkan menerima program studi pilihan pertamanya.
+                  </p>
+                </div>
+              </label>
+
+              {/* BATCH CHOICE 2 */}
+              <label className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                batchProdiType === 'CHOICE_2'
+                  ? 'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/40 ring-1 ring-indigo-500'
+                  : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+              }`}>
+                <input
+                  type="radio"
+                  name="batchProdiOption"
+                  checked={batchProdiType === 'CHOICE_2'}
+                  onChange={() => setBatchProdiType('CHOICE_2')}
+                  className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+                />
+                <div className="space-y-0.5">
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    Alihkan ke Pilihan 2 Masing-Masing Peserta
+                  </span>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Seluruh peserta terpilih akan dialihkan menerima program studi pilihan keduanya.
+                  </p>
+                </div>
+              </label>
+
+              {/* BATCH SPECIFIC PRODI */}
+              <label className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                batchProdiType === 'SPECIFIC'
+                  ? 'border-purple-500 bg-purple-50/70 dark:bg-purple-950/40 ring-1 ring-purple-500'
+                  : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+              }`}>
+                <input
+                  type="radio"
+                  name="batchProdiOption"
+                  checked={batchProdiType === 'SPECIFIC'}
+                  onChange={() => setBatchProdiType('SPECIFIC')}
+                  className="mt-0.5 text-purple-600 focus:ring-purple-500"
+                />
+                <div className="space-y-2 flex-1">
+                  <div>
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      Tetapkan Semua ke Satu Prodi Tertentu
+                    </span>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Seluruh {selectedIds.length} peserta terpilih akan dialihkan serentak ke prodi yang dipilih di bawah ini.
+                    </p>
+                  </div>
+
+                  {batchProdiType === 'SPECIFIC' && (
+                    <div className="pt-1.5">
+                      <select
+                        value={batchSpecificProdiId}
+                        onChange={(e) => setBatchSpecificProdiId(e.target.value ? Number(e.target.value) : '')}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500"
+                      >
+                        {studyPrograms.map((sp) => (
+                          <option key={sp.id} value={sp.id}>
+                            {sp.name} ({sp.facultyName || sp.degree} • Kuota: {sp.quota})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              </label>
+
+              {/* BATCH AUTO */}
+              <label className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                batchProdiType === 'AUTO'
+                  ? 'border-blue-500 bg-blue-50/70 dark:bg-blue-950/40 ring-1 ring-blue-500'
+                  : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+              }`}>
+                <input
+                  type="radio"
+                  name="batchProdiOption"
+                  checked={batchProdiType === 'AUTO'}
+                  onChange={() => setBatchProdiType('AUTO')}
+                  className="mt-0.5 text-blue-600 focus:ring-blue-500"
+                />
+                <div className="space-y-0.5">
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    Reset ke Alokasi Otomatis Sistem
+                  </span>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Menghapus penetapan manual pada peserta terpilih dan mengembalikannya ke perhitungan murni kuota.
+                  </p>
+                </div>
+              </label>
+
+              {/* BATCH CADANGAN */}
+              <label className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                batchProdiType === 'CADANGAN'
+                  ? 'border-amber-500 bg-amber-50/70 dark:bg-amber-950/40 ring-1 ring-amber-500'
+                  : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+              }`}>
+                <input
+                  type="radio"
+                  name="batchProdiOption"
+                  checked={batchProdiType === 'CADANGAN'}
+                  onChange={() => setBatchProdiType('CADANGAN')}
+                  className="mt-0.5 text-amber-600 focus:ring-amber-500"
+                />
+                <div className="space-y-0.5">
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    Tetapkan Semua sebagai Cadangan
+                  </span>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Memindahkan semua peserta terpilih ke daftar cadangan.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {/* Catatan Alasan Massal */}
+            <div className="space-y-1.5 text-xs">
+              <label className="font-semibold text-slate-700 dark:text-slate-300">
+                Catatan Alasan Penetapan Massal (Opsional):
+              </label>
+              <input
+                type="text"
+                value={batchProdiNote}
+                onChange={(e) => setBatchProdiNote(e.target.value)}
+                placeholder="Misal: Penyesuaian kuota rapat pimpinan tanggal ..."
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsBatchProdiModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-white text-xs font-semibold cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isApplyingBatchProdi}
+                onClick={handleSaveBatchProdi}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50"
+              >
+                {isApplyingBatchProdi ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Save className="w-3.5 h-3.5" />
+                )}
+                <span>{isApplyingBatchProdi ? 'Menyimpan...' : 'Terapkan Penetapan Massal'}</span>
               </button>
             </div>
           </div>

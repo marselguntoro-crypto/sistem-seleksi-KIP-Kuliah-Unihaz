@@ -165,6 +165,8 @@ export interface Participant {
   affirmationScore?: number;
   finalScore?: number;
   selectionStatus: SelectionStatus;
+  acceptedProdiId?: number | null;
+  acceptedProdiName?: string | null;
   rank?: number;
   notes?: string;
   createdAt: string;
