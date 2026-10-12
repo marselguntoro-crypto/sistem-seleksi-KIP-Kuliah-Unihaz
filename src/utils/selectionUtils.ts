@@ -52,8 +52,56 @@ export const DEFAULT_SELECTION_WEIGHTS: SelectionWeights = {
   affirmationWeight: 15
 };
 
+export const normalizeDesil = (desil?: string | null): string => {
+  if (!desil) return 'Non-Desil';
+  const clean = desil.trim();
+  if (/^desil\s*1$/i.test(clean) || clean === '1') return 'Desil 1';
+  if (/^desil\s*2$/i.test(clean) || clean === '2') return 'Desil 2';
+  if (/^desil\s*3$/i.test(clean) || clean === '3') return 'Desil 3';
+  if (/^desil\s*4$/i.test(clean) || clean === '4') return 'Desil 4';
+  if (/^desil\s*5$/i.test(clean) || clean === '5') return 'Desil 5';
+  if (/^desil\s*(6|7|8|9|10)/i.test(clean) || clean.includes('6-10')) return 'Desil 6-10';
+  return 'Non-Desil';
+};
+
+/**
+ * Tingkat prioritas desil dalam KIP Kuliah:
+ * 1: Desil 1 (Sangat Miskin / Prioritas 1)
+ * 2: Desil 2 (Miskin / Prioritas 2)
+ * 3: Desil 3 (Hampir Miskin / Prioritas 3)
+ * 4: Desil 4 (Rentan Miskin / Prioritas 4)
+ * 5: Desil 5
+ * 6: Desil 6-10
+ * 7: Non-Desil
+ */
+export const getDesilPriorityLevel = (desil?: string | null): number => {
+  const norm = normalizeDesil(desil);
+  switch (norm) {
+    case 'Desil 1': return 1;
+    case 'Desil 2': return 2;
+    case 'Desil 3': return 3;
+    case 'Desil 4': return 4;
+    case 'Desil 5': return 5;
+    case 'Desil 6-10': return 6;
+    default: return 7;
+  }
+};
+
+/**
+ * Mencocokkan nilai desil dengan filter pencarian / cakupan kuota desil
+ */
+export const matchesDesilScope = (desil: string | undefined | null, filter: string): boolean => {
+  if (!filter || filter === 'ALL') return true;
+  const norm = normalizeDesil(desil);
+  if (filter === 'PRIORITAS_1_4') {
+    return norm === 'Desil 1' || norm === 'Desil 2' || norm === 'Desil 3' || norm === 'Desil 4';
+  }
+  return norm.toLowerCase() === filter.toLowerCase();
+};
+
 export const getDesilAffirmationScore = (desil: DesilCategory | string): number => {
-  switch (desil) {
+  const norm = normalizeDesil(desil);
+  switch (norm) {
     case 'Desil 1':
       return 100;
     case 'Desil 2':
@@ -67,9 +115,6 @@ export const getDesilAffirmationScore = (desil: DesilCategory | string): number 
     case 'Desil 6-10':
       return 45;
     case 'Non-Desil':
-    case 'Non Desil':
-    case 'P3KE':
-    case 'Non-Desil (P3KE)':
     default:
       return 35;
   }
@@ -112,22 +157,41 @@ export const calculateParticipantFinalScore = (
 };
 
 /**
- * Perhitungan Skor Seleksi Tahap Pertama (Akademik UTBK & Wawancara).
- * Tahap pertama menyaring pendaftar berdasarkan kemampuan akademik dan komitmen
+ * Perhitungan Skor Seleksi Tahap Pertama (Akademik UTBK, Wawancara, & Afirmasi Desil).
+ * Menggabungkan nilai UTBK dan Wawancara serta bobot afirmasi Desil kemiskinan
  * sebelum survey lapangan ditambahkan di tahap akhir secara dinamis.
  */
 export const calculateStage1Score = (
   utbkScore: number = 0,
   interviewScore: number = 0,
-  weights: SelectionWeights = DEFAULT_SELECTION_WEIGHTS
+  weights: SelectionWeights = DEFAULT_SELECTION_WEIGHTS,
+  desil?: string
 ): number => {
-  const combinedWeight = (weights.utbkWeight || 35) + (weights.interviewWeight || 25);
+  const utbkWeight = weights.utbkWeight || 0;
+  const intWeight = weights.interviewWeight || 0;
+  const affWeight = weights.affirmationWeight || 0;
+
+  // Jika desil disertakan dan ada bobot afirmasi desil
+  if (desil && affWeight > 0) {
+    const affirmationScore = getDesilAffirmationScore(desil);
+    const combinedWeight = utbkWeight + intWeight + affWeight;
+    if (combinedWeight === 0) return 0;
+
+    const score =
+      (utbkScore * utbkWeight +
+        interviewScore * intWeight +
+        affirmationScore * affWeight) /
+      combinedWeight;
+
+    return Math.round(score * 100) / 100;
+  }
+
+  // Jika tanpa desil atau bobot afirmasi 0
+  const combinedWeight = utbkWeight + intWeight;
   if (combinedWeight === 0) return 0;
 
   const score =
-    (utbkScore * (weights.utbkWeight || 35) +
-      interviewScore * (weights.interviewWeight || 25)) /
-    combinedWeight;
+    (utbkScore * utbkWeight + interviewScore * intWeight) / combinedWeight;
 
   return Math.round(score * 100) / 100;
 };

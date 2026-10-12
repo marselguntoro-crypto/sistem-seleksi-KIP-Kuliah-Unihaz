@@ -5,7 +5,9 @@ import {
   testSupabaseConnection, 
   isSupabaseConfigured, 
   updateSupabaseCredentials, 
-  getStoredSupabaseCredentials 
+  getStoredSupabaseCredentials,
+  sanitizeSupabaseUrl,
+  sanitizeSupabaseAnonKey
 } from '../../services/supabaseClient';
 import { SUPABASE_SCHEMA_SQL } from '../../services/supabaseSchemaSql';
 import {
@@ -134,7 +136,11 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
   };
 
   const handleSaveSupabaseConfig = async () => {
-    updateSupabaseCredentials(supabaseUrlInput, supabaseKeyInput);
+    const cleanUrl = sanitizeSupabaseUrl(supabaseUrlInput);
+    const cleanKey = sanitizeSupabaseAnonKey(supabaseKeyInput);
+    setSupabaseUrlInput(cleanUrl);
+    setSupabaseKeyInput(cleanKey);
+    updateSupabaseCredentials(cleanUrl, cleanKey);
     setIsSupabaseConfigModalOpen(false);
     runTestSupabase();
   };
@@ -1005,8 +1011,14 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
                   onChange={(e) => setSupabaseUrlInput(e.target.value.trim())}
                   className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 />
+                {supabaseUrlInput && sanitizeSupabaseUrl(supabaseUrlInput) !== supabaseUrlInput && (
+                  <div className="mt-1.5 p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>Auto-Normalisasi: Domain utama yang akan digunakan adalah <strong>{sanitizeSupabaseUrl(supabaseUrlInput)}</strong> (path tambahan dibersihkan otomatis).</span>
+                  </div>
+                )}
                 <p className="text-[10px] text-slate-500 mt-1">
-                  Didapat dari: <em>Supabase Dashboard &gt; Project Settings &gt; API &gt; Project URL</em>
+                  Didapat dari: <em>Supabase Dashboard &gt; Project Settings &gt; API &gt; Project URL</em>. (Gunakan domain utama saja, contoh: <code>https://abcdefghijkl.supabase.co</code>, jangan sertakan <code>/rest/v1</code>).
                 </p>
               </div>
 

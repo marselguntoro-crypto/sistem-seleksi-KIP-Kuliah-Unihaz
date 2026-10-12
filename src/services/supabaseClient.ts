@@ -14,6 +14,52 @@ import {
 // ==========================================
 // 1. Supabase Client Configuration & Init
 // ==========================================
+
+/**
+ * Sanitizes Supabase URL to ensure it is strictly the root domain (e.g. https://xyz.supabase.co).
+ * Removes accidental path suffixes such as /rest/v1, /storage/v1, /auth/v1, or dashboard paths.
+ */
+export function sanitizeSupabaseUrl(rawUrl: string): string {
+  if (!rawUrl) return '';
+  let url = rawUrl.trim();
+
+  // If user pasted dashboard project URL:
+  // e.g. https://supabase.com/dashboard/project/<project-ref>
+  // or https://app.supabase.com/project/<project-ref>
+  const dashboardMatch = url.match(/(?:supabase\.com\/dashboard\/project|app\.supabase\.com\/project)\/([a-z0-9_-]+)/i);
+  if (dashboardMatch && dashboardMatch[1]) {
+    return `https://${dashboardMatch[1]}.supabase.co`;
+  }
+
+  // Ensure protocol
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = `https://${url}`;
+  }
+
+  try {
+    const parsed = new URL(url);
+    // Project URL for Supabase must only be the origin: protocol + host + port
+    // Strip any pathnames like /rest/v1, /storage/v1, /auth/v1, etc.
+    return parsed.origin;
+  } catch {
+    return url.replace(/\/rest\/v1\/?$/i, '').replace(/\/storage\/v1\/?$/i, '').replace(/\/auth\/v1\/?$/i, '').replace(/\/+$/, '');
+  }
+}
+
+/**
+ * Sanitizes Supabase Anon Key.
+ * Strips accidental "Bearer " prefixes, whitespace, or quotes.
+ */
+export function sanitizeSupabaseAnonKey(rawKey: string): string {
+  if (!rawKey) return '';
+  let key = rawKey.trim();
+  if (key.startsWith('Bearer ')) {
+    key = key.slice(7).trim();
+  }
+  key = key.replace(/^["']|["']$/g, '');
+  return key;
+}
+
 export function getStoredSupabaseCredentials(): {
   url: string;
   anonKey: string;
@@ -22,22 +68,35 @@ export function getStoredSupabaseCredentials(): {
   const envUrl = import.meta.env.VITE_SUPABASE_URL || '';
   const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
   if (envUrl && envKey && !envUrl.includes('mock-unihaz')) {
-    return { url: envUrl.trim(), anonKey: envKey.trim(), source: 'env' };
+    const cleanUrl = sanitizeSupabaseUrl(envUrl);
+    const cleanKey = sanitizeSupabaseAnonKey(envKey);
+    return { url: cleanUrl, anonKey: cleanKey, source: 'env' };
   }
   if (typeof window !== 'undefined') {
     try {
       const localUrl = localStorage.getItem('unihaz_supabase_url') || '';
       const localKey = localStorage.getItem('unihaz_supabase_anon_key') || '';
       if (localUrl && localKey) {
-        return { url: localUrl.trim(), anonKey: localKey.trim(), source: 'localStorage' };
+        const cleanUrl = sanitizeSupabaseUrl(localUrl);
+        const cleanKey = sanitizeSupabaseAnonKey(localKey);
+        // Auto-heal localStorage if the saved URL or key was dirty
+        if (cleanUrl !== localUrl || cleanKey !== localKey) {
+          try {
+            localStorage.setItem('unihaz_supabase_url', cleanUrl);
+            localStorage.setItem('unihaz_supabase_anon_key', cleanKey);
+          } catch {
+            // ignore
+          }
+        }
+        return { url: cleanUrl, anonKey: cleanKey, source: 'localStorage' };
       }
     } catch {
       // ignore
     }
   }
   return {
-    url: envUrl || 'https://mock-unihaz-kip.supabase.co',
-    anonKey: envKey || 'mock-anon-key-unihaz',
+    url: envUrl ? sanitizeSupabaseUrl(envUrl) : 'https://mock-unihaz-kip.supabase.co',
+    anonKey: envKey ? sanitizeSupabaseAnonKey(envKey) : 'mock-anon-key-unihaz',
     source: 'none'
   };
 }
@@ -55,8 +114,8 @@ export const supabase: SupabaseClient<any, 'public', any> = new Proxy({} as any,
 });
 
 export function updateSupabaseCredentials(url: string, anonKey: string): boolean {
-  const cleanUrl = url.trim();
-  const cleanKey = anonKey.trim();
+  const cleanUrl = sanitizeSupabaseUrl(url);
+  const cleanKey = sanitizeSupabaseAnonKey(anonKey);
   if (cleanUrl && cleanKey) {
     if (typeof window !== 'undefined') {
       try {
@@ -99,7 +158,7 @@ export async function testSupabaseConnection(overrideUrl?: string, overrideKey?:
   needsSchema?: boolean;
 }> {
   const creds = overrideUrl && overrideKey 
-    ? { url: overrideUrl.trim(), anonKey: overrideKey.trim() } 
+    ? { url: sanitizeSupabaseUrl(overrideUrl), anonKey: sanitizeSupabaseAnonKey(overrideKey) } 
     : getStoredSupabaseCredentials();
 
   if (!creds.url || !creds.anonKey || creds.url.includes('mock-unihaz')) {
@@ -117,11 +176,21 @@ export async function testSupabaseConnection(overrideUrl?: string, overrideKey?:
     const { error } = await testClient.from('users').select('id').limit(1);
     const latencyMs = Math.round(performance.now() - start);
     if (error) {
+      if (error.message?.includes('Invalid path specified in request URL')) {
+        return {
+          success: false,
+          message: 'URL Supabase tidak valid (terdapat path tambahan seperti /rest/v1 atau URL dashboard). URL harus berupa domain utama saja, contoh: https://[project-ref].supabase.co',
+          latencyMs,
+          url: creds.url,
+          isConfigured: true,
+          needsSchema: false
+        };
+      }
       const isMissingTable = error.message?.includes('does not exist') || error.code === '42P01';
       return {
         success: false,
         message: isMissingTable
-          ? `Terkoneksi ke Supabase, namun tabel '${error.message.split('"')[1] || 'users'}' belum dibuat di database. Silakan jalankan skrip SQL di Supabase SQL Editor.`
+          ? `Terkoneksi ke host Supabase, namun tabel '${error.message.split('"')[1] || 'users'}' belum dibuat. Silakan salin & jalankan skrip SQL di menu 'Skrip SQL Skema Database' ke SQL Editor Supabase.`
           : error.message,
         latencyMs,
         url: creds.url,
@@ -521,6 +590,21 @@ export function mapAppWeightsToSupabase(w: SelectionWeights): SupabaseSelectionW
     survey_weight: w.surveyWeight,
     affirmation_weight: w.affirmationWeight,
   };
+}
+
+function formatSupabaseError(entity: string, tableName: string, error: any): Error {
+  const msg = error?.message || '';
+  if (msg.includes('Invalid path specified in request URL')) {
+    return new Error(
+      `[${entity}]: URL Supabase tidak valid (terdapat path tambahan seperti /rest/v1 atau URL dashboard). Pastikan URL berupa domain utama saja, contoh: https://[project-ref].supabase.co`
+    );
+  }
+  if (msg.includes('does not exist') || error?.code === '42P01') {
+    return new Error(
+      `[${entity}]: Tabel '${tableName}' belum dibuat di database Supabase Anda. Silakan salin & jalankan skrip SQL di menu 'Skrip SQL Skema Database' ke SQL Editor Supabase.`
+    );
+  }
+  return new Error(`[${entity}]: ${msg}`);
 }
 
 // ==========================================
@@ -999,28 +1083,28 @@ export const supabaseService = {
       if (payload.academicYears && payload.academicYears.length > 0) {
         const rows = payload.academicYears.map(mapAppAcademicYearToSupabase);
         const { error } = await supabase.from('academic_years').upsert(rows, { onConflict: 'id' });
-        if (error) throw new Error(`[Tahun Akademik]: ${error.message}`);
+        if (error) throw formatSupabaseError('Tahun Akademik', 'academic_years', error);
         count += rows.length;
       }
       // 2. Faculties
       if (payload.faculties && payload.faculties.length > 0) {
         const rows = payload.faculties.map(mapAppFacultyToSupabase);
         const { error } = await supabase.from('faculties').upsert(rows, { onConflict: 'id' });
-        if (error) throw new Error(`[Fakultas]: ${error.message}`);
+        if (error) throw formatSupabaseError('Fakultas', 'faculties', error);
         count += rows.length;
       }
       // 3. Study Programs
       if (payload.studyPrograms && payload.studyPrograms.length > 0) {
         const rows = payload.studyPrograms.map(mapAppStudyProgramToSupabase);
         const { error } = await supabase.from('study_programs').upsert(rows, { onConflict: 'id' });
-        if (error) throw new Error(`[Program Studi]: ${error.message}`);
+        if (error) throw formatSupabaseError('Program Studi', 'study_programs', error);
         count += rows.length;
       }
       // 4. Users
       if (payload.users && payload.users.length > 0) {
         const rows = payload.users.map(mapAppUserToSupabase);
         const { error } = await supabase.from('users').upsert(rows, { onConflict: 'id' });
-        if (error) throw new Error(`[Pengguna/Operator]: ${error.message}`);
+        if (error) throw formatSupabaseError('Pengguna/Operator', 'users', error);
         count += rows.length;
       }
       // 5. Participants (Batched in chunks of 50 with in-batch de-duplication and single-row fallback)
@@ -1051,6 +1135,9 @@ export const supabaseService = {
 
           let { error } = await supabase.from('participants').upsert(dedupedRows, { onConflict: 'id' });
           if (error) {
+            if (error.message?.includes('Invalid path') || error.code === '42P01') {
+              throw formatSupabaseError('Data Peserta', 'participants', error);
+            }
             // Fallback row-by-row for this chunk so no duplicate blocks the transaction
             for (const row of dedupedRows) {
               try {
@@ -1070,7 +1157,7 @@ export const supabaseService = {
       if (payload.weights) {
         const row = mapAppWeightsToSupabase(payload.weights);
         const { error } = await supabase.from('selection_weights').upsert([{ id: 1, ...row }], { onConflict: 'id' });
-        if (error) throw new Error(`[Bobot Seleksi]: ${error.message}`);
+        if (error) throw formatSupabaseError('Bobot Seleksi', 'selection_weights', error);
       }
       return { success: true, count };
     } catch (err: any) {

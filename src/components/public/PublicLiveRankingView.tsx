@@ -1,7 +1,15 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Participant, StudyProgram, AcademicYear, Faculty, User, SelectionWeights } from '../../types';
-import { calculateStage1Score, calculateParticipantFinalScore, getDesilAffirmationScore, extractAcceptedProdi } from '../../utils/selectionUtils';
+import {
+  calculateStage1Score,
+  calculateParticipantFinalScore,
+  getDesilAffirmationScore,
+  extractAcceptedProdi,
+  normalizeDesil,
+  getDesilPriorityLevel,
+  matchesDesilScope
+} from '../../utils/selectionUtils';
 import {
   Award,
   Trophy,
@@ -63,6 +71,7 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
   const [prodiFilter, setProdiFilter] = useState<string>('ALL');
   const [facultyFilter, setFacultyFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [desilFilter, setDesilFilter] = useState<string>('ALL');
   const [maskNisn, setMaskNisn] = useState<boolean>(true);
   const [copiedLink, setCopiedCopied] = useState<boolean>(false);
   const [lastUpdated, setLastUpdated] = useState<string>('');
@@ -134,19 +143,51 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
     return nisn;
   };
 
+  // Hitung sebaran pendaftar per kategori desil
+  const desilCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      ALL: participants.length,
+      PRIORITAS_1_4: 0,
+      'Desil 1': 0,
+      'Desil 2': 0,
+      'Desil 3': 0,
+      'Desil 4': 0,
+      'Desil 5': 0,
+      'Desil 6-10': 0,
+      'Non-Desil': 0
+    };
+
+    participants.forEach((p) => {
+      const norm = normalizeDesil(p.desil);
+      counts[norm] = (counts[norm] || 0) + 1;
+      if (norm === 'Desil 1' || norm === 'Desil 2' || norm === 'Desil 3' || norm === 'Desil 4') {
+        counts.PRIORITAS_1_4++;
+      }
+    });
+
+    return counts;
+  }, [participants]);
+
   // -------------------------------------------------------------
   // CALCULATION 1: TAHAP 1 RANKING & STUDY PROGRAM QUOTA ALLOCATION
+  // Mengintegrasikan Desil secara otomatis:
+  // - Jika filter desil aktif: menghitung cohort desil tersebut dan menetapkan kuotanya secara independen.
+  // - Jika filter 'ALL': menghitung seluruh desil dengan prioritas berjenjang (Desil 1 > 2 > 3 > 4).
   // -------------------------------------------------------------
   const { stage1Candidates, programStats, stage1Stats } = useMemo(() => {
-    // 1. Calculate each participant's Stage 1 Score
-    const evaluated = participants.map((p) => {
+    // 1. Saring peserta sesuai cakupan desil yang dipilih
+    const scopedParticipants = participants.filter((p) => matchesDesilScope(p.desil, desilFilter));
+
+    // 2. Evaluasi skor Tahap 1, afirmasi desil, dan prioritas
+    const evaluated = scopedParticipants.map((p) => {
       const utbk = Number(p.utbkScore) || 0;
       const interview = Number(p.interviewScore) || 0;
       const isComplete =
         p.utbkScore !== undefined && p.utbkScore !== null && p.utbkScore > 0 &&
         p.interviewScore !== undefined && p.interviewScore !== null && p.interviewScore > 0;
-      const stage1Score = calculateStage1Score(utbk, interview, weights);
+      const stage1Score = calculateStage1Score(utbk, interview, weights, p.desil);
       const affirmationScore = getDesilAffirmationScore(p.desil);
+      const desilPriority = getDesilPriorityLevel(p.desil);
       const choice1 = findProdi(p.firstChoiceProdiId, p.firstChoiceProdiName);
       const choice2 = findProdi(p.secondChoiceProdiId, p.secondChoiceProdiName);
 
@@ -163,6 +204,7 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
         isComplete,
         stage1Score,
         affirmationScore,
+        desilPriority,
         choice1,
         choice2,
         acceptedInfo,
@@ -172,9 +214,10 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
       };
     });
 
-    // 2. Sort: complete first, stage1Score desc, utbk desc, interview desc
+    // 3. Sort: kelengkapan nilai -> prioritas desil (1 > 2 > 3 > 4) -> skor tahap 1 -> tie breakers
     evaluated.sort((a, b) => {
       if (a.isComplete !== b.isComplete) return a.isComplete ? -1 : 1;
+      if (a.desilPriority !== b.desilPriority) return a.desilPriority - b.desilPriority;
       if (b.stage1Score !== a.stage1Score) return b.stage1Score - a.stage1Score;
       if (b.utbkScore !== a.utbkScore) return b.utbkScore - a.utbkScore;
       if (b.interviewScore !== a.interviewScore) return b.interviewScore - a.interviewScore;
@@ -332,13 +375,14 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
         totalPassed: totalP1 + totalP2 + totalManual
       }
     };
-  }, [participants, studyPrograms, weights]);
+  }, [participants, studyPrograms, weights, desilFilter]);
 
   // -------------------------------------------------------------
   // CALCULATION 2: FINAL SELECTION RANKING
   // -------------------------------------------------------------
   const finalCandidates = useMemo(() => {
-    const list = participants.map((p) => {
+    const scoped = participants.filter((p) => matchesDesilScope(p.desil, desilFilter));
+    const list = scoped.map((p) => {
       const finalScore = calculateParticipantFinalScore(
         p.utbkScore || 0,
         p.interviewScore || 0,
@@ -373,7 +417,7 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
       ...item,
       rank: index + 1
     }));
-  }, [participants, weights, studyPrograms]);
+  }, [participants, weights, studyPrograms, desilFilter]);
 
   // -------------------------------------------------------------
   // SEARCH RESULT: INDIVIDUAL APPLICANT RESULT CARD
@@ -510,8 +554,11 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
           'NISN': p.nisn,
           'Nama Peserta': p.name,
           'Asal Sekolah': p.schoolOrigin,
+          'Kategori Desil': normalizeDesil(p.desil),
+          'Tingkat Prioritas': `Prioritas ${getDesilPriorityLevel(p.desil)}`,
           'Nilai UTBK': item.utbkScore,
           'Nilai Wawancara': item.interviewScore,
+          'Skor Afirmasi Desil': item.affirmationScore,
           'Skor Tahap 1': item.stage1Score,
           'Pilihan 1': item.choice1 ? item.choice1.name : p.firstChoiceProdiName,
           'Pilihan 2': item.choice2 ? item.choice2.name : p.secondChoiceProdiName,
@@ -526,6 +573,8 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
           'NISN': p.nisn,
           'Nama Peserta': p.name,
           'Asal Sekolah': p.schoolOrigin,
+          'Kategori Desil': normalizeDesil(p.desil),
+          'Tingkat Prioritas': `Prioritas ${getDesilPriorityLevel(p.desil)}`,
           'Nilai Akhir Final': item.finalScore,
           'Pilihan 1': item.choice1 ? item.choice1.name : p.firstChoiceProdiName,
           'Pilihan 2': item.choice2 ? item.choice2.name : p.secondChoiceProdiName,
@@ -926,8 +975,87 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
         {/* ============================================================ */}
         {/* 6. FILTER CONTROLS & EXPORT TOOLBAR */}
         {/* ============================================================ */}
-        <div className="bg-slate-800/80 rounded-2xl border border-slate-700/80 p-4 space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-slate-800/80 rounded-2xl border border-slate-700/80 p-4 space-y-3.5">
+          {/* Desil Scope Selector Pills */}
+          <div className="space-y-1.5 pb-2.5 border-b border-slate-700/60">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Cakupan Desil & Hitung Otomatis Kuota</span>
+              </span>
+              {desilFilter !== 'ALL' && (
+                <button
+                  onClick={() => setDesilFilter('ALL')}
+                  className="text-[11px] text-blue-400 hover:text-blue-300 font-semibold cursor-pointer"
+                >
+                  Reset ke Semua Desil
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                onClick={() => setDesilFilter('ALL')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  desilFilter === 'ALL'
+                    ? 'bg-blue-600 text-white shadow-sm ring-1 ring-blue-400'
+                    : 'bg-slate-900/80 text-slate-300 hover:bg-slate-700 border border-slate-700/80'
+                }`}
+              >
+                Semua Desil ({desilCounts.ALL})
+              </button>
+              <button
+                onClick={() => setDesilFilter('PRIORITAS_1_4')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  desilFilter === 'PRIORITAS_1_4'
+                    ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-400'
+                    : 'bg-slate-900/80 text-emerald-400 hover:bg-slate-700 border border-emerald-500/30'
+                }`}
+              >
+                ⭐ Prioritas Desil 1-4 ({desilCounts.PRIORITAS_1_4})
+              </button>
+              {(['Desil 1', 'Desil 2', 'Desil 3', 'Desil 4', 'Desil 5', 'Desil 6-10', 'Non-Desil'] as const).map((d) => {
+                const count = desilCounts[d] || 0;
+                const isSelected = desilFilter === d;
+                return (
+                  <button
+                    key={d}
+                    onClick={() => setDesilFilter(isSelected ? 'ALL' : d)}
+                    className={`px-2 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-400 font-bold'
+                        : 'bg-slate-900/80 text-slate-300 hover:bg-slate-700 border border-slate-700/80'
+                    }`}
+                  >
+                    {d} <span className="opacity-70 text-[10px]">({count})</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {/* Desil Dropdown Filter */}
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                Kategori Desil
+              </label>
+              <select
+                value={desilFilter}
+                onChange={(e) => setDesilFilter(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ALL">Semua Desil ({desilCounts.ALL})</option>
+                <option value="PRIORITAS_1_4">⭐ Prioritas Desil 1-4 ({desilCounts.PRIORITAS_1_4})</option>
+                <option value="Desil 1">Desil 1 ({desilCounts['Desil 1'] || 0})</option>
+                <option value="Desil 2">Desil 2 ({desilCounts['Desil 2'] || 0})</option>
+                <option value="Desil 3">Desil 3 ({desilCounts['Desil 3'] || 0})</option>
+                <option value="Desil 4">Desil 4 ({desilCounts['Desil 4'] || 0})</option>
+                <option value="Desil 5">Desil 5 ({desilCounts['Desil 5'] || 0})</option>
+                <option value="Desil 6-10">Desil 6-10 ({desilCounts['Desil 6-10'] || 0})</option>
+                <option value="Non-Desil">Non-Desil ({desilCounts['Non-Desil'] || 0})</option>
+              </select>
+            </div>
+
             {/* Status Filter */}
             <div>
               <label className="block text-[11px] font-semibold text-slate-400 mb-1">
@@ -1048,7 +1176,7 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
 
             {activeTab === 'STAGE1_QUOTA' && (
               <span className="text-[11px] text-slate-400 hidden sm:inline">
-                Formula Skor = (UTBK × {weights.utbkWeight} + Wawancara × {weights.interviewWeight}) ÷ {weights.utbkWeight + weights.interviewWeight}
+                Formula: (UTBK {weights.utbkWeight}% + Wawancara {weights.interviewWeight}% + Afirmasi Desil {weights.affirmationWeight}%) • Prioritas Kuota: Desil 1 &rarr; 2 &rarr; 3 &rarr; 4
               </span>
             )}
           </div>
@@ -1060,6 +1188,7 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
                   <th className="py-3 px-3 w-16 text-center">Rank</th>
                   <th className="py-3 px-4">Nama & Asal Sekolah</th>
                   <th className="py-3 px-3">NISN</th>
+                  <th className="py-3 px-3 text-center">Desil</th>
                   {activeTab === 'STAGE1_QUOTA' ? (
                     <>
                       <th className="py-3 px-3 text-center">UTBK</th>
@@ -1084,7 +1213,7 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
                 {activeTab === 'STAGE1_QUOTA' ? (
                   filteredStage1List.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="py-12 text-center text-slate-500">
+                      <td colSpan={11} className="py-12 text-center text-slate-500">
                         Tidak ada data yang cocok dengan kriteria pencarian.
                       </td>
                     </tr>
@@ -1127,6 +1256,25 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
                           </td>
                           <td className="py-3 px-3">
                             <code className="font-mono text-slate-300 text-xs">{formatNisn(p.nisn)}</code>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            {(() => {
+                              const norm = normalizeDesil(p.desil);
+                              const prio = getDesilPriorityLevel(p.desil);
+                              let badgeColor = 'bg-slate-800 text-slate-300 border-slate-700';
+                              if (prio === 1) badgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+                              else if (prio === 2) badgeColor = 'bg-teal-500/20 text-teal-300 border-teal-500/40';
+                              else if (prio === 3) badgeColor = 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
+                              else if (prio === 4) badgeColor = 'bg-sky-500/20 text-sky-300 border-sky-500/40';
+                              else if (prio === 5) badgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+                              else if (prio === 6) badgeColor = 'bg-orange-500/20 text-orange-300 border-orange-500/40';
+
+                              return (
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${badgeColor}`}>
+                                  {norm} {prio <= 4 ? `(P-${prio})` : ''}
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="py-3 px-3 text-center">
                             <span className="font-mono text-indigo-300 font-semibold">
@@ -1211,7 +1359,7 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
                 ) : (
                   filteredFinalList.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-slate-500">
+                      <td colSpan={8} className="py-12 text-center text-slate-500">
                         Tidak ada data yang cocok dengan kriteria pencarian.
                       </td>
                     </tr>
@@ -1229,6 +1377,25 @@ export const PublicLiveRankingView: React.FC<PublicLiveRankingViewProps> = ({
                           </td>
                           <td className="py-3 px-3">
                             <code className="font-mono text-slate-300 text-xs">{formatNisn(p.nisn)}</code>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            {(() => {
+                              const norm = normalizeDesil(p.desil);
+                              const prio = getDesilPriorityLevel(p.desil);
+                              let badgeColor = 'bg-slate-800 text-slate-300 border-slate-700';
+                              if (prio === 1) badgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+                              else if (prio === 2) badgeColor = 'bg-teal-500/20 text-teal-300 border-teal-500/40';
+                              else if (prio === 3) badgeColor = 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
+                              else if (prio === 4) badgeColor = 'bg-sky-500/20 text-sky-300 border-sky-500/40';
+                              else if (prio === 5) badgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+                              else if (prio === 6) badgeColor = 'bg-orange-500/20 text-orange-300 border-orange-500/40';
+
+                              return (
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${badgeColor}`}>
+                                  {norm} {prio <= 4 ? `(P-${prio})` : ''}
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="py-3 px-3 text-center">
                             <span className="px-2 py-0.5 rounded bg-emerald-600/30 text-emerald-200 border border-emerald-500/40 font-mono font-bold">

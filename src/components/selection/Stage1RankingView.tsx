@@ -6,7 +6,10 @@ import {
   getDesilAffirmationScore,
   DEFAULT_SELECTION_WEIGHTS,
   extractAcceptedProdi,
-  applyAcceptedProdiToParticipant
+  applyAcceptedProdiToParticipant,
+  normalizeDesil,
+  getDesilPriorityLevel,
+  matchesDesilScope
 } from '../../utils/selectionUtils';
 import {
   Award,
@@ -53,6 +56,8 @@ export interface Stage1Candidate {
   stage1Score: number;
   utbkScore: number;
   interviewScore: number;
+  affirmationScore?: number;
+  desilPriority?: number;
   isComplete: boolean;
   choice1: StudyProgram | null;
   choice2: StudyProgram | null;
@@ -302,18 +307,50 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
     return null;
   };
 
+  // Hitung jumlah pendaftar per kategori desil secara real-time
+  const desilCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      ALL: participants.length,
+      PRIORITAS_1_4: 0,
+      'Desil 1': 0,
+      'Desil 2': 0,
+      'Desil 3': 0,
+      'Desil 4': 0,
+      'Desil 5': 0,
+      'Desil 6-10': 0,
+      'Non-Desil': 0
+    };
+
+    participants.forEach((p) => {
+      const norm = normalizeDesil(p.desil);
+      counts[norm] = (counts[norm] || 0) + 1;
+      if (norm === 'Desil 1' || norm === 'Desil 2' || norm === 'Desil 3' || norm === 'Desil 4') {
+        counts.PRIORITAS_1_4++;
+      }
+    });
+
+    return counts;
+  }, [participants]);
+
   // -------------------------------------------------------------
   // CORE RANKING & QUOTA ALLOCATION ENGINE
+  // Menghitung otomatis perankingan dan menetapkan kuota berdasarkan
+  // filter desil yang dipilih. Jika filter adalah 'ALL', sistem menghitung
+  // ulang berdasarkan seluruh desil dengan prioritas berjenjang (Desil 1 > 2 > 3 > 4).
   // -------------------------------------------------------------
   const { rankedCandidates, programStats, overallStats } = useMemo(() => {
-    // 1. Calculate each participant's Stage 1 Score and extract manual accepted prodi
-    const evaluatedList = participants.map((p) => {
+    // 1. Saring peserta sesuai cakupan desil yang dipilih
+    const scopedParticipants = participants.filter((p) => matchesDesilScope(p.desil, desilFilter));
+
+    // 2. Evaluasi nilai dan afirmasi peserta
+    const evaluatedList = scopedParticipants.map((p) => {
       const utbk = Number(p.utbkScore) || 0;
       const interview = Number(p.interviewScore) || 0;
       const isComplete = (p.utbkScore !== undefined && p.utbkScore !== null && p.utbkScore > 0) &&
                          (p.interviewScore !== undefined && p.interviewScore !== null && p.interviewScore > 0);
-      const stage1Score = calculateStage1Score(utbk, interview, weights);
+      const stage1Score = calculateStage1Score(utbk, interview, weights, p.desil);
       const affirmationScore = getDesilAffirmationScore(p.desil);
+      const desilPriority = getDesilPriorityLevel(p.desil);
       const choice1 = findProdi(p.firstChoiceProdiId, p.firstChoiceProdiName);
       const choice2 = findProdi(p.secondChoiceProdiId, p.secondChoiceProdiName);
       
@@ -330,6 +367,7 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
         isComplete,
         stage1Score,
         affirmationScore,
+        desilPriority,
         choice1,
         choice2,
         acceptedInfo,
@@ -339,13 +377,17 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
       };
     });
 
-    // 2. Sort candidates:
-    // First by score completion (complete scores first),
-    // Then by Stage 1 Score descending,
-    // Then tie-breakers: UTBK score, Interview score, Desil Priority
+    // 3. Urutkan kandidat:
+    // a. Kelengkapan nilai (peserta dengan nilai lengkap didahulukan)
+    // b. Prioritas Desil (Level 1: Desil 1, Level 2: Desil 2, Level 3: Desil 3, Level 4: Desil 4, dst)
+    // c. Skor Tahap 1 (Akumulasi UTBK, Wawancara, & Afirmasi Desil)
+    // d. Tie-breakers: UTBK, Wawancara, Afirmasi, ID Peserta
     evaluatedList.sort((a, b) => {
       if (a.isComplete !== b.isComplete) {
         return a.isComplete ? -1 : 1;
+      }
+      if (a.desilPriority !== b.desilPriority) {
+        return a.desilPriority - b.desilPriority;
       }
       if (b.stage1Score !== a.stage1Score) {
         return b.stage1Score - a.stage1Score;
@@ -603,7 +645,7 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
         qualifiedForSurvey: candidates.filter((c) => c.allocatedProdi !== null).length
       }
     };
-  }, [participants, studyPrograms, simulatedQuotas, weights]);
+  }, [participants, studyPrograms, simulatedQuotas, weights, desilFilter]);
 
   // -------------------------------------------------------------
   // FILTERING LOGIC
@@ -634,9 +676,6 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
       // Complete scores only toggle
       const matchesComplete = !onlyCompleteScores || cand.isComplete;
 
-      // Desil match
-      const matchesDesil = desilFilter === 'ALL' || p.desil === desilFilter;
-
       // Faculty match
       let matchesFaculty = true;
       if (facultyFilter !== 'ALL') {
@@ -658,9 +697,9 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
           p.secondChoiceProdiName.toLowerCase().includes(prodiFilter.toLowerCase());
       }
 
-      return matchesSearch && matchesStatus && matchesComplete && matchesDesil && matchesFaculty && matchesProdi;
+      return matchesSearch && matchesStatus && matchesComplete && matchesFaculty && matchesProdi;
     });
-  }, [rankedCandidates, searchTerm, statusFilter, onlyCompleteScores, desilFilter, facultyFilter, prodiFilter]);
+  }, [rankedCandidates, searchTerm, statusFilter, onlyCompleteScores, facultyFilter, prodiFilter]);
 
   // Multi-select helpers
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -693,9 +732,11 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
         'NISN': p.nisn,
         'Nama Peserta': p.name,
         'Asal Sekolah': p.schoolOrigin,
-        'Desil Ekonomi': p.desil,
+        'Desil Ekonomi': p.desil || 'Non-Desil',
+        'Tingkat Prioritas': c.desilPriority && c.desilPriority <= 4 ? `Prioritas ${c.desilPriority}` : (c.desilPriority === 5 ? 'Desil 5' : 'Non-Prioritas'),
         'Nilai UTBK': c.utbkScore,
         'Nilai Wawancara': c.interviewScore,
+        'Skor Afirmasi Desil': c.affirmationScore ?? '-',
         'Total Nilai Tahap 1': c.stage1Score,
         'Pilihan 1': c.choice1 ? c.choice1.name : p.firstChoiceProdiName,
         'Kuota Pil 1': c.choice1Quota,
@@ -705,6 +746,7 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
         'Prodi Yang Diterima': c.allocatedProdi ? c.allocatedProdi.name : '-',
         'Fakultas Diterima': c.allocatedProdi?.facultyName || '-',
         'Metode Alokasi': c.isManualAllocation ? 'Penetapan Manual / Khusus' : 'Otomatis (Sistem Kuota)',
+        'Cakupan Filter Desil': desilFilter === 'ALL' ? 'Semua Desil' : desilFilter,
         'Keterangan & Riwayat Alokasi': c.allocationReason,
         'Kelayakan Survey Lapangan': c.allocatedProdi ? 'Berhak Survey' : 'Cadangan / Pending'
       };
@@ -714,9 +756,10 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
     // Auto column widths
     const wscols = [
       { wch: 10 }, { wch: 16 }, { wch: 14 }, { wch: 25 }, { wch: 22 },
-      { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 24 },
-      { wch: 10 }, { wch: 24 }, { wch: 10 }, { wch: 26 }, { wch: 24 },
-      { wch: 24 }, { wch: 24 }, { wch: 45 }, { wch: 20 }
+      { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 16 },
+      { wch: 16 }, { wch: 24 }, { wch: 10 }, { wch: 24 }, { wch: 10 },
+      { wch: 26 }, { wch: 24 }, { wch: 24 }, { wch: 24 }, { wch: 18 },
+      { wch: 45 }, { wch: 20 }
     ];
     ws['!cols'] = wscols;
 
@@ -796,9 +839,8 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
               Ranking Tahap 1 & Penetapan Kuota Prodi
             </h1>
             <p className="text-blue-200/90 text-sm md:text-base max-w-3xl leading-relaxed">
-              Penyaringan peserta berdasarkan akumulasi nilai <span className="text-yellow-300 font-semibold">UTBK & Wawancara</span>. 
-              Sistem secara otomatis menetapkan kuota program studi dengan logika pengalihan: jika kuota Pilihan 1 telah terpenuhi, 
-              peserta dialihkan ke Pilihan 2 secara transparan sebelum penugasan survey lapangan.
+              Penyaringan peserta berdasarkan akumulasi nilai <span className="text-yellow-300 font-semibold">UTBK & Wawancara</span> serta <span className="text-emerald-300 font-semibold">Prioritas Desil Kemiskinan</span>. 
+              Sistem secara otomatis menetapkan kuota program studi berjenjang (Desil 1 s.d. 4) dan logika pengalihan pilihan 2 secara transparan.
             </p>
           </div>
 
@@ -838,10 +880,10 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
 
         {/* Weights & Formula Info Bar */}
         <div className="mt-6 pt-4 border-t border-blue-800/60 flex flex-wrap items-center justify-between gap-4 text-xs text-blue-200">
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3">
             <span className="font-semibold text-white flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
-              Formula Nilai Tahap 1:
+              Formula & Prioritas Tahap 1:
             </span>
             <span className="px-2.5 py-1 rounded-md bg-blue-950/60 border border-blue-700/40">
               UTBK: <strong className="text-white">{weights.utbkWeight}%</strong>
@@ -849,8 +891,13 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
             <span className="px-2.5 py-1 rounded-md bg-blue-950/60 border border-blue-700/40">
               Wawancara: <strong className="text-white">{weights.interviewWeight}%</strong>
             </span>
-            <span className="text-blue-300 italic">
-              Skor Tahap 1 = ((UTBK × {weights.utbkWeight}) + (Wawancara × {weights.interviewWeight})) ÷ ({weights.utbkWeight + weights.interviewWeight})
+            {weights.affirmationWeight > 0 && (
+              <span className="px-2.5 py-1 rounded-md bg-emerald-950/60 border border-emerald-700/40 text-emerald-200">
+                Afirmasi Desil: <strong className="text-white">{weights.affirmationWeight}%</strong>
+              </span>
+            )}
+            <span className="text-blue-300 italic hidden sm:inline">
+              Prioritas Kuota: Desil 1 → Desil 2 → Desil 3 → Desil 4
             </span>
           </div>
 
@@ -1090,7 +1137,126 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
       {/* ============================================================ */}
       {/* 4. FILTERS & SEARCH BAR */}
       {/* ============================================================ */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm space-y-3">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm space-y-3.5">
+        {/* Desil Scope Selector Pills */}
+        <div className="space-y-2 pb-2.5 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+              <Layers className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <span>Cakupan Evaluasi & Penetapan Kuota Desil:</span>
+            </span>
+            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+              {desilFilter === 'ALL'
+                ? 'Sistem menghitung otomatis seluruh desil dengan prioritas berjenjang (Desil 1 > 2 > 3 > 4)'
+                : desilFilter === 'PRIORITAS_1_4'
+                ? 'Sistem menghitung & menetapkan kuota khusus kelompok Prioritas Utama (Desil 1 s.d. 4)'
+                : `Sistem menghitung & menetapkan kuota otomatis khusus pendaftar ${desilFilter}`}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+            <button
+              type="button"
+              onClick={() => setDesilFilter('ALL')}
+              className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${
+                desilFilter === 'ALL'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+              }`}
+            >
+              Semua Desil ({desilCounts.ALL})
+            </button>
+            <button
+              type="button"
+              onClick={() => setDesilFilter('PRIORITAS_1_4')}
+              className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${
+                desilFilter === 'PRIORITAS_1_4'
+                  ? 'bg-amber-600 text-white shadow-xs ring-2 ring-amber-500/30'
+                  : 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100'
+              }`}
+            >
+              ⭐ Prioritas Desil 1-4 ({desilCounts.PRIORITAS_1_4})
+            </button>
+            <button
+              type="button"
+              onClick={() => setDesilFilter('Desil 1')}
+              className={`px-2.5 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                desilFilter === 'Desil 1'
+                  ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-500/30'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
+              }`}
+            >
+              Desil 1 ({desilCounts['Desil 1']})
+            </button>
+            <button
+              type="button"
+              onClick={() => setDesilFilter('Desil 2')}
+              className={`px-2.5 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                desilFilter === 'Desil 2'
+                  ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-500/30'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
+              }`}
+            >
+              Desil 2 ({desilCounts['Desil 2']})
+            </button>
+            <button
+              type="button"
+              onClick={() => setDesilFilter('Desil 3')}
+              className={`px-2.5 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                desilFilter === 'Desil 3'
+                  ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-500/30'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
+              }`}
+            >
+              Desil 3 ({desilCounts['Desil 3']})
+            </button>
+            <button
+              type="button"
+              onClick={() => setDesilFilter('Desil 4')}
+              className={`px-2.5 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                desilFilter === 'Desil 4'
+                  ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-500/30'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
+              }`}
+            >
+              Desil 4 ({desilCounts['Desil 4']})
+            </button>
+            <button
+              type="button"
+              onClick={() => setDesilFilter('Desil 5')}
+              className={`px-2.5 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                desilFilter === 'Desil 5'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
+              }`}
+            >
+              Desil 5 ({desilCounts['Desil 5']})
+            </button>
+            <button
+              type="button"
+              onClick={() => setDesilFilter('Desil 6-10')}
+              className={`px-2.5 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                desilFilter === 'Desil 6-10'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
+              }`}
+            >
+              Desil 6-10 ({desilCounts['Desil 6-10']})
+            </button>
+            <button
+              type="button"
+              onClick={() => setDesilFilter('Non-Desil')}
+              className={`px-2.5 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                desilFilter === 'Non-Desil'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
+              }`}
+            >
+              Non-Desil ({desilCounts['Non-Desil']})
+            </button>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {/* Search */}
           <div className="lg:col-span-2 relative">
@@ -1178,22 +1344,23 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
             </select>
           </div>
 
-          {/* Desil Filter */}
+          {/* Desil Scope Filter */}
           <div>
             <select
               id="filter-desil"
               value={desilFilter}
               onChange={(e) => setDesilFilter(e.target.value)}
-              className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white"
+              className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white font-semibold"
             >
-              <option value="ALL">Semua Desil</option>
-              <option value="Desil 1">Desil 1</option>
-              <option value="Desil 2">Desil 2</option>
-              <option value="Desil 3">Desil 3</option>
-              <option value="Desil 4">Desil 4</option>
-              <option value="Desil 5">Desil 5</option>
-              <option value="Desil 6-10">Desil 6-10</option>
-              <option value="Non-Desil">Non-Desil</option>
+              <option value="ALL">Semua Desil (Prioritas Berjenjang)</option>
+              <option value="PRIORITAS_1_4">Prioritas Utama: Desil 1-4 ({desilCounts.PRIORITAS_1_4})</option>
+              <option value="Desil 1">Desil 1 ({desilCounts['Desil 1']} siswa)</option>
+              <option value="Desil 2">Desil 2 ({desilCounts['Desil 2']} siswa)</option>
+              <option value="Desil 3">Desil 3 ({desilCounts['Desil 3']} siswa)</option>
+              <option value="Desil 4">Desil 4 ({desilCounts['Desil 4']} siswa)</option>
+              <option value="Desil 5">Desil 5 ({desilCounts['Desil 5']} siswa)</option>
+              <option value="Desil 6-10">Desil 6-10 ({desilCounts['Desil 6-10']} siswa)</option>
+              <option value="Non-Desil">Non-Desil ({desilCounts['Non-Desil']} siswa)</option>
             </select>
           </div>
         </div>
@@ -1492,11 +1659,21 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
 
                       {/* Name & Identity */}
                       <td className="py-3 px-4">
-                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
                           <span>{p.name}</span>
                           {p.desil && (
-                            <span className="text-[10px] px-1.5 py-0.2 rounded font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                              {p.desil}
+                            <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold border ${
+                              cand.desilPriority === 1
+                                ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-700'
+                                : cand.desilPriority === 2
+                                ? 'bg-orange-100 text-orange-900 border-orange-300 dark:bg-orange-950/70 dark:text-orange-300 dark:border-orange-700'
+                                : cand.desilPriority === 3
+                                ? 'bg-blue-100 text-blue-900 border-blue-300 dark:bg-blue-950/70 dark:text-blue-300 dark:border-blue-700'
+                                : cand.desilPriority === 4
+                                ? 'bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-700'
+                                : 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+                            }`}>
+                              {p.desil} {cand.desilPriority && cand.desilPriority <= 4 ? `(P-${cand.desilPriority})` : ''}
                             </span>
                           )}
                         </div>
@@ -1994,8 +2171,8 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
                 </div>
                 <input
                   type="range"
-                  min="10"
-                  max="90"
+                  min="5"
+                  max="80"
                   value={tempWeights.utbkWeight}
                   onChange={(e) => setTempWeights((prev) => ({ ...prev, utbkWeight: parseInt(e.target.value, 10) }))}
                   className="w-full accent-blue-600"
@@ -2009,17 +2186,39 @@ export const Stage1RankingView: React.FC<Stage1RankingViewProps> = ({
                 </div>
                 <input
                   type="range"
-                  min="10"
-                  max="90"
+                  min="5"
+                  max="80"
                   value={tempWeights.interviewWeight}
                   onChange={(e) => setTempWeights((prev) => ({ ...prev, interviewWeight: parseInt(e.target.value, 10) }))}
                   className="w-full accent-yellow-500"
                 />
               </div>
 
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 text-[11px]">
-                Total bobot kombinasi Tahap 1 = {tempWeights.utbkWeight + tempWeights.interviewWeight}%. 
-                Nilai akhir Tahap 1 dinormalisasi secara proporsional.
+              <div className="space-y-1.5">
+                <div className="flex justify-between font-semibold text-slate-700 dark:text-slate-300">
+                  <span>Bobot Afirmasi Desil (Kemiskinan):</span>
+                  <span className="font-bold text-emerald-600">{tempWeights.affirmationWeight ?? 0}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="50"
+                  value={tempWeights.affirmationWeight ?? 0}
+                  onChange={(e) => setTempWeights((prev) => ({ ...prev, affirmationWeight: parseInt(e.target.value, 10) }))}
+                  className="w-full accent-emerald-500"
+                />
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                  Memberikan skor proporsional afirmasi Desil: Desil 1 (100), Desil 2 (90), Desil 3 (80), Desil 4 (70), dst.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 text-[11px] space-y-1">
+                <div>
+                  Total bobot kombinasi Tahap 1 = <strong className="text-slate-900 dark:text-white">{(tempWeights.utbkWeight || 0) + (tempWeights.interviewWeight || 0) + (tempWeights.affirmationWeight || 0)}%</strong>.
+                </div>
+                <div>
+                  Kandidat otomatis diprioritaskan berjenjang berdasarkan <strong className="text-emerald-600 dark:text-emerald-400">Desil 1 &rarr; 2 &rarr; 3 &rarr; 4</strong> saat penetapan kuota prodi.
+                </div>
               </div>
             </div>
 
