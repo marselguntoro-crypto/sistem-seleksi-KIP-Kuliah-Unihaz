@@ -153,6 +153,10 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
   // Import Mode State
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [rawImportData, setRawImportData] = useState<any[]>([]);
+  const [isMoodleDetected, setIsMoodleDetected] = useState<boolean>(false);
+  const [moodleDenominator, setMoodleDenominator] = useState<number>(10);
+  const [convertMoodleScale, setConvertMoodleScale] = useState<boolean>(true);
   const [parsedRows, setParsedRows] = useState<ParsedScoreRow[]>([]);
   const [previewFilter, setPreviewFilter] = useState<'ALL' | 'VALID' | 'EMPTY' | 'ISSUES'>('ALL');
   const [includeEmptyScores, setIncludeEmptyScores] = useState<boolean>(false);
@@ -250,13 +254,83 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
   // IMPORT UTBK SCORES LOGIC
   // ==========================================
 
-  // Process rows from Excel/JSON
-  const processImportRows = (rawRows: any[], sourceName: string) => {
+  // Toggle Moodle scale conversion (e.g. 6.50/10 -> 65.00)
+  const handleToggleMoodleScale = (newScaleState: boolean) => {
+    setConvertMoodleScale(newScaleState);
+    if (rawImportData.length > 0 && fileName) {
+      processImportRows(rawImportData, fileName, newScaleState);
+    }
+  };
+
+  // Process rows from Excel/JSON/Moodle CSV
+  const processImportRows = (
+    rawRows: any[],
+    sourceName: string,
+    overrideConvertScale?: boolean
+  ) => {
     setFileName(sourceName);
+    setRawImportData(rawRows);
     setImportSuccessMessage(null);
 
-    const results: ParsedScoreRow[] = rawRows.map((row, index) => {
-      const rowNum = index + 2; // Assuming row 1 is header
+    // 1. Detect if the file is from Moodle
+    let detectedMoodle = false;
+    let detectedDenominator = 10;
+
+    for (const row of rawRows) {
+      if (!row || typeof row !== 'object') continue;
+      const keys = Object.keys(row);
+      const gradeHeader = keys.find((k) => /^(grade|nilai)\s*(\/|\b)/i.test(k.trim()));
+      if (gradeHeader) {
+        detectedMoodle = true;
+        const m = gradeHeader.match(/\/\s*(\d+(\.\d+)?)/);
+        if (m) {
+          detectedDenominator = parseFloat(m[1]);
+        }
+        break;
+      }
+      if (('Username' in row || 'username' in row) && ('State' in row || 'state' in row)) {
+        detectedMoodle = true;
+        break;
+      }
+    }
+
+    setIsMoodleDetected(detectedMoodle);
+    setMoodleDenominator(detectedDenominator);
+
+    const activeConvertScale =
+      overrideConvertScale !== undefined
+        ? overrideConvertScale
+        : convertMoodleScale;
+
+    // 2. Filter out Moodle summary / footer rows (e.g. "Overall average")
+    const filteredRows = rawRows.filter((row) => {
+      if (!row || typeof row !== 'object') return false;
+      const keys = Object.keys(row);
+      if (keys.length === 0) return false;
+
+      if (detectedMoodle) {
+        const lastName = String(row['Last name'] || row['lastname'] || '').trim().toLowerCase();
+        const firstName = String(row['First name'] || row['firstname'] || '').trim().toLowerCase();
+        if (
+          lastName.includes('overall average') ||
+          firstName.includes('overall average') ||
+          lastName.includes('rata-rata') ||
+          firstName.includes('rata-rata') ||
+          lastName === 'average'
+        ) {
+          return false;
+        }
+        const username = String(row['Username'] || row['username'] || '').trim();
+        const email = String(row['Email address'] || row['email'] || '').trim();
+        if (!username && !email && !row['Nomor Pendaftaran'] && !row['NISN']) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    const results: ParsedScoreRow[] = filteredRows.map((row, index) => {
+      const rowNum = index + 2;
 
       // Robust field getter (supports exact key or case-insensitive matching)
       const findValue = (candidates: string[]): any => {
@@ -271,15 +345,25 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
           const matchKey = rowKeys.find(
             (k) => k.toLowerCase().replace(/[^a-z0-9]/g, '') === normC
           );
-          if (matchKey && row[matchKey] !== undefined && row[matchKey] !== null && String(row[matchKey]).trim() !== '') {
+          if (
+            matchKey &&
+            row[matchKey] !== undefined &&
+            row[matchKey] !== null &&
+            String(row[matchKey]).trim() !== ''
+          ) {
             return row[matchKey];
           }
         }
         return '';
       };
 
+      // Extract username
+      const usernameVal = String(
+        findValue(['Username', 'username', 'User name', 'ID Peserta', 'idnumber'])
+      ).trim();
+
       // Extract registration number
-      const regNumber = String(
+      let regNumber = String(
         findValue([
           'Nomor Pendaftaran',
           'No Pendaftaran',
@@ -292,7 +376,7 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
       ).trim();
 
       // Extract NISN
-      const rawNisn = String(
+      let rawNisn = String(
         findValue([
           'NISN',
           'nisn',
@@ -301,55 +385,206 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
         ])
       ).trim().replace(/[^0-9]/g, '');
 
-      // Extract Name (optional for display)
-      const name = String(
-        findValue([
-          'Nama Lengkap',
-          'Nama',
-          'name',
-          'Nama Peserta'
-        ])
+      // If Moodle username exists, resolve NISN or RegNumber
+      if (usernameVal) {
+        const cleanDigits = usernameVal.replace(/[^0-9]/g, '');
+        if (!rawNisn && cleanDigits.length >= 8 && cleanDigits.length <= 10) {
+          rawNisn = cleanDigits.padStart(10, '0');
+        }
+        if (
+          !regNumber &&
+          (usernameVal.toUpperCase().startsWith('KIP') ||
+            usernameVal.startsWith('25') ||
+            usernameVal.startsWith('REG'))
+        ) {
+          regNumber = usernameVal;
+        }
+      }
+
+      // Extract Email
+      const email = String(
+        findValue(['Email address', 'Email', 'email', 'Alamat email', 'Surel'])
+      ).trim().toLowerCase();
+
+      // Extract Name (supports separate First name & Last name from Moodle)
+      const firstName = String(findValue(['First name', 'Firstname', 'Nama Depan'])).trim();
+      const lastName = String(findValue(['Last name', 'Lastname', 'Nama Belakang'])).trim();
+      let name = String(
+        findValue(['Nama Lengkap', 'Nama', 'name', 'Nama Peserta'])
       ).trim();
 
-      // Extract Score with broad alias support
-      const rawScore = findValue([
-        'Nilai UTBK',
-        'Nilai UTBK / TPA',
-        'Nilai UTBK/TPA',
-        'Skor UTBK',
-        'Skor UTBK / TPA',
-        'Nilai TPA',
-        'Skor TPA',
-        'Nilai',
-        'Skor',
-        'utbkScore',
-        'UTBK',
-        'TPA',
-        'Nilai CBT'
-      ]);
+      if (!name && (firstName || lastName)) {
+        if (firstName.toLowerCase() === lastName.toLowerCase()) {
+          name = firstName;
+        } else if (firstName && lastName) {
+          name = `${firstName} ${lastName}`;
+        } else {
+          name = firstName || lastName;
+        }
+      }
+
+      // Extract Score: detect Grade/10.00 column or standard aliases
+      const rowKeys = Object.keys(row);
+      const moodleGradeKey = rowKeys.find((k) => /^(grade|nilai)\s*(\/|\b)/i.test(k.trim()));
+
+      let rawScore =
+        moodleGradeKey !== undefined
+          ? row[moodleGradeKey]
+          : findValue([
+              'Nilai UTBK',
+              'Nilai UTBK / TPA',
+              'Nilai UTBK/TPA',
+              'Skor UTBK',
+              'Skor UTBK / TPA',
+              'Nilai TPA',
+              'Skor TPA',
+              'Nilai',
+              'Skor',
+              'utbkScore',
+              'UTBK',
+              'TPA',
+              'Nilai CBT',
+              'Grade'
+            ]);
+
+      // Moodle Exam State & Timing
+      const moodleState = String(findValue(['State', 'state', 'Status Ujian'])).trim();
+      const isMoodleInProgress = moodleState.toLowerCase() === 'in progress';
+      const timeTaken = String(findValue(['Time taken', 'Waktu yang digunakan'])).trim();
 
       // Extract Notes
-      const notes = String(
-        findValue([
-          'Catatan',
-          'Keterangan',
-          'notes',
-          'Keterangan Nilai'
-        ])
+      let notes = String(
+        findValue(['Catatan', 'Keterangan', 'notes', 'Keterangan Nilai'])
       ).trim();
 
-      // Parse Score flexibly supporting both '.' (76.70) and ',' (76,70), plus empty / '-'
-      const { parsedScore, isValid: isScoreValid, isEmpty, formatNote, rawText } = parseFlexibleUtbkScore(rawScore);
-
-      // Match Participant
-      let matched: Participant | null = null;
-      if (regNumber) {
-        matched = participants.find(
-          (p) => p.regNumber.toLowerCase() === regNumber.toLowerCase()
-        ) || null;
+      if (detectedMoodle && !notes && moodleState) {
+        notes = `Moodle CBT (${moodleState}${timeTaken ? `, ${timeTaken}` : ''})`;
       }
+
+      // Parse Score flexibly
+      let isScoreEmpty = false;
+      let parsedScore: number | null = null;
+      let formatNote: string | undefined = undefined;
+      let isScoreValid = false;
+      const rawText = String(rawScore ?? '').trim();
+
+      if (
+        isMoodleInProgress ||
+        rawText === '-' ||
+        rawText === '' ||
+        rawScore === null ||
+        rawScore === undefined
+      ) {
+        isScoreEmpty = true;
+        isScoreValid = true;
+        parsedScore = null;
+        if (isMoodleInProgress) {
+          formatNote = 'Moodle: Ujian belum selesai (In progress)';
+        }
+      } else {
+        const parseRes = parseFlexibleUtbkScore(rawScore);
+        if (parseRes.isEmpty) {
+          isScoreEmpty = true;
+          isScoreValid = true;
+          parsedScore = null;
+        } else if (parseRes.isValid && parseRes.parsedScore !== null) {
+          const score = parseRes.parsedScore;
+          // Apply scale conversion if Moodle has max grade <= 10 (or user opted in)
+          const shouldScale =
+            activeConvertScale &&
+            detectedMoodle &&
+            detectedDenominator > 0 &&
+            detectedDenominator <= 10;
+
+          if (shouldScale) {
+            const scaled =
+              Math.round(((score / detectedDenominator) * 100) * 100) / 100;
+            parsedScore = scaled;
+            formatNote = `Moodle: ${score.toFixed(2)} / ${detectedDenominator} ➔ Konversi Skala 100 (${scaled.toFixed(2)})`;
+            isScoreValid = true;
+          } else {
+            parsedScore = score;
+            if (detectedMoodle && detectedDenominator <= 10) {
+              formatNote = `Moodle Asli: Skala 0–${detectedDenominator} (${score.toFixed(2)})`;
+            } else {
+              formatNote = parseRes.formatNote;
+            }
+            isScoreValid = true;
+          }
+        } else {
+          isScoreValid = false;
+        }
+      }
+
+      // Match Participant with 4-level fallback
+      let matched: Participant | null = null;
+
+      // Level 1: Match by Registration Number
+      if (regNumber) {
+        matched =
+          participants.find(
+            (p) => p.regNumber.toLowerCase() === regNumber.toLowerCase()
+          ) || null;
+      }
+      if (!matched && usernameVal) {
+        matched =
+          participants.find(
+            (p) => p.regNumber.toLowerCase() === usernameVal.toLowerCase()
+          ) || null;
+      }
+
+      // Level 2: Match by NISN (exact or padded)
       if (!matched && rawNisn) {
-        matched = participants.find((p) => p.nisn === rawNisn) || null;
+        matched =
+          participants.find((p) => {
+            const pNisn = String(p.nisn || '').trim();
+            return (
+              pNisn === rawNisn ||
+              pNisn.replace(/^0+/, '') === rawNisn.replace(/^0+/, '') ||
+              pNisn === rawNisn.padStart(10, '0') ||
+              pNisn.padStart(10, '0') === rawNisn
+            );
+          }) || null;
+      }
+
+      // Level 3: Match by Username digits against p.nisn
+      if (!matched && usernameVal) {
+        const uDigits = usernameVal.replace(/[^0-9]/g, '');
+        if (uDigits) {
+          matched =
+            participants.find((p) => {
+              const pNisn = String(p.nisn || '').trim();
+              return (
+                pNisn === uDigits ||
+                pNisn.replace(/^0+/, '') === uDigits.replace(/^0+/, '') ||
+                pNisn === uDigits.padStart(10, '0') ||
+                pNisn.padStart(10, '0') === uDigits
+              );
+            }) || null;
+        }
+      }
+
+      // Level 4: Match by Email
+      if (!matched && email && !email.includes('kip.kuliah')) {
+        matched =
+          participants.find(
+            (p) => p.email && p.email.trim().toLowerCase() === email
+          ) || null;
+      }
+
+      // Level 5: Match by Name (Exact normalized)
+      if (!matched && name) {
+        const normName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        matched =
+          participants.find((p) => {
+            const pNorm = p.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (pNorm === normName) return true;
+            if (firstName && lastName) {
+              const revNorm = `${lastName}${firstName}`.toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (pNorm === revNorm) return true;
+            }
+            return false;
+          }) || null;
       }
 
       // Determine Status
@@ -358,23 +593,24 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
 
       if (!matched) {
         status = 'UNMATCHED';
-        errorMessage = `Peserta dengan No. Reg '${regNumber || '-'}' atau NISN '${rawNisn || '-'}' tidak ditemukan di database.`;
-      } else if (isEmpty) {
-        // Jika nilai kosong atau '-', maka dianggap tidak ada nilai atau kosong (bukan error)
+        errorMessage = `Peserta dengan ${
+          usernameVal ? `Username/NISN '${usernameVal}'` : ''
+        }${name ? ` / Nama '${name}'` : ''} tidak ditemukan di database.`;
+      } else if (isScoreEmpty) {
         status = 'EMPTY_SCORE';
       } else if (!isScoreValid) {
         status = 'INVALID_SCORE';
-        errorMessage = `Nilai '${rawText}' tidak valid (wajib berupa angka antara 0.00 – 100.00; format titik 76.70 maupun koma 76,70 didukung).`;
+        errorMessage = `Nilai '${rawText}' tidak valid (wajib berupa angka antara 0.00 – 100.00).`;
       }
 
       return {
         rowNum,
-        regNumber: regNumber || (matched ? matched.regNumber : '-'),
-        nisn: rawNisn || (matched ? matched.nisn : '-'),
+        regNumber: regNumber || (matched ? matched.regNumber : usernameVal || '-'),
+        nisn: rawNisn || (matched ? matched.nisn : usernameVal || '-'),
         name: name || (matched ? matched.name : '-'),
         rawScore,
         parsedScore,
-        isEmptyScore: isEmpty,
+        isEmptyScore: isScoreEmpty,
         formatNote,
         notes,
         matchedParticipant: matched,
@@ -435,6 +671,63 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
     };
     reader.readAsArrayBuffer(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Demo runner with Moodle Quiz export format
+  const handleLoadSampleMoodleScores = () => {
+    // Pick active participants to create realistic matching sample
+    const sampleMoodleData = participants.slice(0, 8).map((p, idx) => {
+      const grades = [6.50, 4.00, 7.25, 5.50, 8.00, 2.75, '-', 6.00];
+      const states = ['Finished', 'Finished', 'Finished', 'Finished', 'Finished', 'Finished', 'In progress', 'Finished'];
+      const durations = ['35 mins 12 secs', '48 mins 10 secs', '1 hour 4 mins', '22 mins 45 secs', '55 mins 18 secs', '1 hour 15 mins', '-', '30 mins 21 secs'];
+      const g = grades[idx % grades.length];
+      return {
+        'Last name': p.name.split(' ').slice(1).join(' ') || p.name,
+        'First name': p.name.split(' ')[0] || p.name,
+        'Username': p.nisn || p.regNumber,
+        'Email address': p.email || `peserta${idx}@kip.kuliah`,
+        'State': states[idx % states.length],
+        'Started on': '15 July 2025  10:00 AM',
+        'Completed': g === '-' ? '-' : '15 July 2025  11:00 AM',
+        'Time taken': durations[idx % durations.length],
+        'Grade/10.00': g
+      };
+    });
+
+    // Add Moodle footer overall average
+    sampleMoodleData.push({
+      'Last name': 'Overall average',
+      'First name': '',
+      'Username': '',
+      'Email address': '',
+      'State': '',
+      'Started on': '',
+      'Completed': '',
+      'Time taken': '',
+      'Grade/10.00': 5.25
+    });
+
+    processImportRows(sampleMoodleData, 'kuis-utbk-moodle-export-demo.csv', true);
+  };
+
+  // Download Sample Moodle CSV Template
+  const handleDownloadMoodleTemplate = () => {
+    const sampleMoodleData = participants.slice(0, 10).map((p, idx) => ({
+      'Last name': p.name.split(' ').slice(1).join(' ') || p.name,
+      'First name': p.name.split(' ')[0] || p.name,
+      'Username': p.nisn || p.regNumber,
+      'Email address': p.email || 'peserta@gmail.com',
+      'State': 'Finished',
+      'Started on': '15 July 2025  10:00 AM',
+      'Completed': '15 July 2025  10:45 AM',
+      'Time taken': '45 mins',
+      'Grade/10.00': (6.5 + (idx * 0.25)).toFixed(2)
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(sampleMoodleData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Hasil_Kuis_Moodle');
+    XLSX.writeFile(wb, 'Format_Contoh_Hasil_Kuis_Moodle.csv');
   };
 
   // Quick Demo / Sample Test Runner
@@ -922,12 +1215,20 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
               </button>
 
               <button
+                onClick={handleDownloadMoodleTemplate}
+                className="px-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                title="Unduh contoh file CSV berformat laporan kuis Moodle"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Contoh Format Moodle (.csv)</span>
+              </button>
+              <button
                 onClick={handleDownloadBlankTemplate}
                 className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/20 font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
                 title="Unduh format template kosong"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>Format Kosong</span>
+                <span>Format Standar Kosong</span>
               </button>
             </div>
           </div>
@@ -999,19 +1300,64 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
                 </p>
               </div>
 
-              <button
-                onClick={handleLoadSampleScores}
-                className="w-full px-3.5 py-2 rounded-lg bg-white hover:bg-slate-100 text-indigo-900 font-bold text-xs border border-indigo-300 shadow-2xs transition flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Sparkles className="w-4 h-4 text-amber-500" />
-                <span>Muat Data Sampel Nilai</span>
-              </button>
+              <div className="space-y-2">
+                <button
+                  onClick={handleLoadSampleMoodleScores}
+                  className="w-full px-3.5 py-2 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-xs transition flex items-center justify-center gap-2 cursor-pointer"
+                  title="Uji coba langsung parsing format CSV hasil unduhan kuis Moodle"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-200" />
+                  <span>Uji Format Kuis Moodle (Demo)</span>
+                </button>
+                <button
+                  onClick={handleLoadSampleScores}
+                  className="w-full px-3.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-indigo-900 font-bold text-xs border border-indigo-300 shadow-2xs transition flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Muat Sampel Excel Biasa</span>
+                </button>
+              </div>
             </div>
           </div>
 
           {/* Parsed Preview Section */}
           {parsedRows.length > 0 && (
             <div className="space-y-4">
+              {/* Moodle Format Banner & Scale Converter Toggle */}
+              {isMoodleDetected && (
+                <div className="p-4 bg-gradient-to-r from-orange-50 via-amber-50 to-amber-100/60 rounded-xl border border-orange-200/90 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-orange-600 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
+                      M
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs font-bold text-orange-950">Format Laporan Kuis Moodle Terdeteksi</h4>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-200 text-orange-900 border border-orange-300">
+                          Skala Asli: {moodleDenominator.toFixed(2)}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-orange-800 mt-0.5">
+                        Kolom <strong>Username</strong> otomatis dipasangkan ke NISN / No. Pendaftaran peserta. Baris ringkasan <em>Overall average</em> otomatis disaring.
+                      </p>
+                    </div>
+                  </div>
+
+                  {moodleDenominator <= 10 && (
+                    <div className="flex items-center gap-2 bg-white/95 px-3.5 py-2 rounded-lg border border-orange-300 shadow-2xs shrink-0">
+                      <label className="flex items-center gap-2 text-xs font-bold text-orange-950 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={convertMoodleScale}
+                          onChange={(e) => handleToggleMoodleScale(e.target.checked)}
+                          className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500 border-slate-300 cursor-pointer"
+                        />
+                        <span>Konversi ke Skala 100 (Nilai &times; 10, misal: 6.50 ➔ 65.00)</span>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              )}
               {/* Metrics Bar */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
