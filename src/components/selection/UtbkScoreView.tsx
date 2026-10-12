@@ -174,16 +174,17 @@ export const UtbkScoreView: React.FC<UtbkScoreViewProps> = ({
   // Filtered participants for manual mode
   const filteredParticipants = useMemo(() => {
     return participants.filter((p) => {
+      const searchLower = searchTerm.toLowerCase();
       const matchesSearch =
         searchTerm === '' ||
-        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.regNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.nisn.includes(searchTerm);
+        (p.name || '').toLowerCase().includes(searchLower) ||
+        (p.regNumber || '').toLowerCase().includes(searchLower) ||
+        (p.nisn || '').includes(searchTerm);
 
       const matchesProdi =
         prodiFilter === 'ALL' ||
         String(p.firstChoiceProdiId) === prodiFilter ||
-        p.firstChoiceProdiName.toLowerCase().includes(prodiFilter.toLowerCase());
+        (p.firstChoiceProdiName || '').toLowerCase().includes(prodiFilter.toLowerCase());
 
       const matchesStatus =
         scoreStatusFilter === 'ALL' ||

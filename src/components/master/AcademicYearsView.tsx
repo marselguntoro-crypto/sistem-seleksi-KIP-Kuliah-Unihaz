@@ -68,16 +68,35 @@ export const AcademicYearsView: React.FC<AcademicYearsViewProps> = ({
     description: ''
   });
 
+  // Helper to get real-time participant count for an academic year (defined before consumers)
+  const getYearParticipantsCount = (item: AcademicYear) => {
+    if (!participants || participants.length === 0) return item.participantsCount || 0;
+    return participants.filter(
+      (p) =>
+        Number(p.academicYearId) === Number(item.id) ||
+        (p.academicYearCode && p.academicYearCode.trim() === item.code.trim())
+    ).length;
+  };
+
   const handleOpenAdd = () => {
     setEditingItem(null);
+    let nextStartYear = 2027;
+    if (academicYears.length > 0) {
+      const parsedYears = academicYears.map((y) => {
+        const parts = y.code.split('/');
+        return parseInt(parts[0], 10) || 2026;
+      });
+      nextStartYear = Math.max(...parsedYears) + 1;
+    }
+    const defaultCode = `${nextStartYear}/${nextStartYear + 1}`;
     setFormData({
-      code: '2027/2028',
+      code: defaultCode,
       semester: 'Ganjil',
       quota: 120,
       startDate: new Date().toISOString().split('T')[0],
       endDate: new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0],
       isActive: false,
-      description: 'Penerimaan Mahasiswa Baru KIP-Kuliah Periode 2027/2028'
+      description: `Penerimaan Mahasiswa Baru KIP-Kuliah Periode ${defaultCode}`
     });
     setErrorMessage(null);
     setIsModalOpen(true);
@@ -100,26 +119,59 @@ export const AcademicYearsView: React.FC<AcademicYearsViewProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Validation
-    const codeRegex = /^\d{4}\/\d{4}$/;
-    if (!codeRegex.test(formData.code.trim())) {
+    const cleanCode = formData.code.trim();
+
+    // 1. Validation format YYYY/YYYY
+    const codeRegex = /^(\d{4})\/(\d{4})$/;
+    const match = cleanCode.match(codeRegex);
+    if (!match) {
       setErrorMessage('Format Tahun Akademik harus YYYY/YYYY (contoh: 2026/2027)');
       return;
     }
+
+    // 2. Year continuity check (endYear must be startYear + 1)
+    const startYear = parseInt(match[1], 10);
+    const endYear = parseInt(match[2], 10);
+    if (endYear !== startYear + 1) {
+      setErrorMessage(`Tahun akhir harus tepat 1 tahun setelah tahun awal (contoh: ${startYear}/${startYear + 1})`);
+      return;
+    }
+
+    // 3. Duplicate code check
+    const duplicate = academicYears.find(
+      (y) => y.code.trim().toLowerCase() === cleanCode.toLowerCase() && y.id !== editingItem?.id
+    );
+    if (duplicate) {
+      setErrorMessage(`Tahun Akademik '${cleanCode}' sudah terdaftar dalam sistem`);
+      return;
+    }
+
+    // 4. Quota check
     if (formData.quota <= 0) {
       setErrorMessage('Kuota KIP-K harus lebih besar dari 0');
       return;
     }
+
+    // 5. Date validation
     if (new Date(formData.endDate) < new Date(formData.startDate)) {
       setErrorMessage('Tanggal Selesai tidak boleh mendahului Tanggal Mulai');
       return;
+    }
+
+    // 6. Safeguard: prevent deactivating the only active year
+    if (editingItem && editingItem.isActive && !formData.isActive) {
+      const otherActiveYears = academicYears.filter((y) => y.id !== editingItem.id && y.isActive);
+      if (otherActiveYears.length === 0) {
+        setErrorMessage('Sistem harus memiliki minimal satu tahun akademik yang aktif. Aktifkan tahun lain terlebih dahulu sebelum menonaktifkan periode ini.');
+        return;
+      }
     }
 
     if (editingItem) {
       if (handleUpdateAction) {
         handleUpdateAction({
           ...editingItem,
-          code: formData.code.trim(),
+          code: cleanCode,
           semester: formData.semester,
           quota: Number(formData.quota),
           startDate: formData.startDate,
@@ -131,7 +183,7 @@ export const AcademicYearsView: React.FC<AcademicYearsViewProps> = ({
     } else {
       if (handleAddAction) {
         handleAddAction({
-          code: formData.code.trim(),
+          code: cleanCode,
           semester: formData.semester,
           quota: Number(formData.quota),
           startDate: formData.startDate,
@@ -147,6 +199,13 @@ export const AcademicYearsView: React.FC<AcademicYearsViewProps> = ({
 
   const handleDeleteConfirm = () => {
     if (!deleteCandidate) return;
+
+    if (deleteCandidate.isActive) {
+      alert(`Tidak dapat menghapus Tahun Akademik ${deleteCandidate.code} karena berstatus AKTIF. Silakan aktifkan tahun akademik lain terlebih dahulu.`);
+      setDeleteCandidate(null);
+      return;
+    }
+
     const count = getYearParticipantsCount(deleteCandidate);
     if (count > 0) {
       alert(`Tidak dapat menghapus Tahun Akademik ${deleteCandidate.code} karena masih memiliki ${count} data calon mahasiswa. Hapus atau pindahkan data peserta terlebih dahulu.`);
@@ -162,24 +221,29 @@ export const AcademicYearsView: React.FC<AcademicYearsViewProps> = ({
     setDeleteCandidate(null);
   };
 
+  const handleToggleActiveClick = (item: AcademicYear) => {
+    if (item.isActive) {
+      alert("Tahun akademik ini sedang AKTIF sebagai acuan sistem. Untuk mengganti periode aktif, silakan klik tombol 'Aktifkan Periode Ini' pada tahun akademik yang diinginkan.");
+      return;
+    }
+    if (handleSetActiveAction) {
+      handleSetActiveAction(item.id);
+    }
+  };
+
   // Filtered academic years
   const filteredYears = academicYears.filter((item) => {
+    const term = searchTerm.trim().toLowerCase();
     const matchesSearch =
-      item.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.description && item.description.toLowerCase().includes(searchTerm.toLowerCase()));
+      term === '' ||
+      item.code.toLowerCase().includes(term) ||
+      (item.semester && item.semester.toLowerCase().includes(term)) ||
+      (item.description && item.description.toLowerCase().includes(term));
     
     if (statusFilter === 'ACTIVE') return matchesSearch && item.isActive;
     if (statusFilter === 'INACTIVE') return matchesSearch && !item.isActive;
     return matchesSearch;
   });
-
-  // Helper to get real-time participant count for an academic year
-  const getYearParticipantsCount = (item: AcademicYear) => {
-    if (!participants || participants.length === 0) return item.participantsCount || 0;
-    return participants.filter(
-      (p) => p.academicYearId === item.id || p.academicYearCode === item.code
-    ).length;
-  };
 
   // Calculate summary metrics
   const totalYears = academicYears.length;
@@ -366,17 +430,17 @@ export const AcademicYearsView: React.FC<AcademicYearsViewProps> = ({
                           </span>
                           <button
                             type="button"
-                            onClick={() => handleSetActiveAction && handleSetActiveAction(item.id)}
-                            className="text-[10px] text-slate-400 hover:text-rose-600 underline font-medium cursor-pointer"
-                            title="Klik untuk menonaktifkan tahun akademik ini"
+                            onClick={() => handleToggleActiveClick(item)}
+                            className="text-[10px] text-slate-400 hover:text-amber-600 underline font-medium cursor-pointer"
+                            title="Tahun akademik ini sedang aktif sebagai acuan sistem"
                           >
-                            Nonaktifkan
+                            Periode Aktif
                           </button>
                         </div>
                       ) : (
                         <button
                           type="button"
-                          onClick={() => handleSetActiveAction && handleSetActiveAction(item.id)}
+                          onClick={() => handleToggleActiveClick(item)}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all cursor-pointer"
                           title="Klik untuk jadikan tahun akademik aktif (data pendaftar akan otomatis disesuaikan)"
                         >
@@ -395,9 +459,14 @@ export const AcademicYearsView: React.FC<AcademicYearsViewProps> = ({
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => setDeleteCandidate(item)}
-                          className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-rose-600 hover:bg-rose-50 cursor-pointer transition"
-                          title="Hapus Tahun Akademik"
+                          disabled={item.isActive}
+                          onClick={() => !item.isActive && setDeleteCandidate(item)}
+                          className={`p-1.5 rounded-lg border transition ${
+                            item.isActive
+                              ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                              : 'border-slate-200 text-slate-600 hover:text-rose-600 hover:bg-rose-50 cursor-pointer'
+                          }`}
+                          title={item.isActive ? 'Tahun akademik aktif tidak dapat dihapus' : 'Hapus Tahun Akademik'}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>

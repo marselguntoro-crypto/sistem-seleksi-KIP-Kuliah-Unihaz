@@ -162,11 +162,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           (selectedStatus === 'ALL_PASSED' && isPassedStatus(p.selectionStatus)) ||
           p.selectionStatus === selectedStatus;
 
+        const searchLower = searchTerm.toLowerCase();
         const matchesSearch =
           searchTerm === '' ||
-          p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          p.regNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          p.nik.includes(searchTerm);
+          (p.name || '').toLowerCase().includes(searchLower) ||
+          (p.regNumber || '').toLowerCase().includes(searchLower) ||
+          (p.nik || '').includes(searchTerm);
 
         return matchesYear && matchesProdi && matchesStatus && matchesSearch;
       })

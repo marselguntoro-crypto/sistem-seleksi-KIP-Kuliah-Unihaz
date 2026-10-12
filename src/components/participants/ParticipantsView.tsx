@@ -90,36 +90,36 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
       // Search
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch =
-        item.name.toLowerCase().includes(searchLower) ||
-        item.regNumber.toLowerCase().includes(searchLower) ||
-        item.nik.includes(searchLower) ||
-        item.nisn.includes(searchLower) ||
-        item.schoolOrigin.toLowerCase().includes(searchLower) ||
-        item.city.toLowerCase().includes(searchLower);
+        (item.name || '').toLowerCase().includes(searchLower) ||
+        (item.regNumber || '').toLowerCase().includes(searchLower) ||
+        (item.nik || '').includes(searchLower) ||
+        (item.nisn || '').includes(searchLower) ||
+        (item.schoolOrigin || '').toLowerCase().includes(searchLower) ||
+        (item.city || '').toLowerCase().includes(searchLower);
 
       if (!matchesSearch) return false;
 
       // Year Filter
       if (selectedYear === 'ACTIVE') {
         if (activeYear) {
-          const matchId = item.academicYearId === activeYear.id;
+          const matchId = Number(item.academicYearId) === Number(activeYear.id);
           const matchCode = item.academicYearCode === activeYear.code;
           if (!matchId && !matchCode) return false;
         }
       } else if (selectedYear !== 'ALL') {
         const targetYear = academicYears.find((y) => y.id.toString() === selectedYear);
-        const matchId = item.academicYearId.toString() === selectedYear;
+        const matchId = String(item.academicYearId || '') === selectedYear;
         const matchCode = targetYear ? item.academicYearCode === targetYear.code : false;
         if (!matchId && !matchCode) return false;
       }
 
       // Prodi 1 Filter
-      if (selectedProdi1 !== 'ALL' && item.firstChoiceProdiId.toString() !== selectedProdi1) {
+      if (selectedProdi1 !== 'ALL' && String(item.firstChoiceProdiId || '') !== selectedProdi1) {
         return false;
       }
 
       // Prodi 2 Filter
-      if (selectedProdi2 !== 'ALL' && item.secondChoiceProdiId.toString() !== selectedProdi2) {
+      if (selectedProdi2 !== 'ALL' && String(item.secondChoiceProdiId || '') !== selectedProdi2) {
         return false;
       }
 

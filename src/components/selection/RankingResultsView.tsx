@@ -187,16 +187,19 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
   // Filtered participants by search, faculty, prodi 1 & 2, desil, survey status, and selection status
   const filteredParticipants = useMemo(() => {
     return rankedParticipants.filter((p) => {
+      const searchLower = searchTerm.toLowerCase();
       const matchesSearch =
         searchTerm === '' ||
-        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.regNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.nik.includes(searchTerm);
+        (p.name || '').toLowerCase().includes(searchLower) ||
+        (p.regNumber || '').toLowerCase().includes(searchLower) ||
+        (p.nik || '').includes(searchTerm);
+
+      const prodi1NameClean = (p.firstChoiceProdiName || '').toLowerCase().trim();
 
       // Find participant's primary study program details
       const prodiObj1 =
         prodiLookup.byId.get(p.firstChoiceProdiId) ||
-        prodiLookup.byName.get(p.firstChoiceProdiName.toLowerCase().trim());
+        prodiLookup.byName.get(prodi1NameClean);
 
       const participantFacultyId = prodiObj1?.facultyId;
       const participantFacultyName = prodiObj1?.facultyName;
@@ -206,11 +209,12 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
         (participantFacultyId !== undefined && String(participantFacultyId) === facultyFilter) ||
         (participantFacultyName !== undefined && participantFacultyName === facultyFilter);
 
+      const filterProdi1Clean = firstChoiceProdiFilter.toLowerCase().trim();
       const matchesProdi1 =
         firstChoiceProdiFilter === 'ALL' ||
         String(p.firstChoiceProdiId) === firstChoiceProdiFilter ||
-        p.firstChoiceProdiName.toLowerCase().trim() === firstChoiceProdiFilter.toLowerCase().trim() ||
-        (prodiObj1 && (String(prodiObj1.id) === firstChoiceProdiFilter || prodiObj1.name.toLowerCase().trim() === firstChoiceProdiFilter.toLowerCase().trim()));
+        prodi1NameClean === filterProdi1Clean ||
+        (prodiObj1 && (String(prodiObj1.id) === firstChoiceProdiFilter || prodiObj1.name.toLowerCase().trim() === filterProdi1Clean));
 
       const prodiObj2 =
         prodiLookup.byId.get(p.secondChoiceProdiId) ||
@@ -264,7 +268,7 @@ export const RankingResultsView: React.FC<RankingResultsViewProps> = ({
       const prodiApplicants = rankedParticipants.filter(
         (p) =>
           p.firstChoiceProdiId === prodi.id ||
-          p.firstChoiceProdiName.toLowerCase().trim() === prodi.name.toLowerCase().trim()
+          (p.firstChoiceProdiName && p.firstChoiceProdiName.toLowerCase().trim() === prodi.name.toLowerCase().trim())
       );
       const passedCount = prodiApplicants.filter((p) => isPassedStatus(p.selectionStatus)).length;
       const passedDiktiCount = prodiApplicants.filter((p) => p.selectionStatus === 'Lulus KIP DIKTI').length;

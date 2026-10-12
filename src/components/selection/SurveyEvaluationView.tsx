@@ -73,12 +73,13 @@ export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
 
   const filteredParticipants = useMemo(() => {
     return participants.filter((p) => {
+      const searchLower = searchTerm.toLowerCase();
       const matchesSearch =
         searchTerm === '' ||
-        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.regNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.address.toLowerCase().includes(searchTerm.toLowerCase());
+        (p.name || '').toLowerCase().includes(searchLower) ||
+        (p.regNumber || '').toLowerCase().includes(searchLower) ||
+        (p.city || '').toLowerCase().includes(searchLower) ||
+        (p.address || '').toLowerCase().includes(searchLower);
 
       const matchesSurvey =
         surveyFilter === 'ALL' ||
@@ -94,7 +95,7 @@ export const SurveyEvaluationView: React.FC<SurveyEvaluationViewProps> = ({
       const matchesProdi =
         prodiFilter === 'ALL' ||
         String(p.firstChoiceProdiId) === prodiFilter ||
-        p.firstChoiceProdiName.toLowerCase().includes(prodiFilter.toLowerCase());
+        (p.firstChoiceProdiName || '').toLowerCase().includes(prodiFilter.toLowerCase());
 
       return matchesSearch && matchesSurvey && matchesStage1 && matchesProdi;
     });

@@ -68,12 +68,13 @@ export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> =
   // Filtered list
   const filteredParticipants = useMemo(() => {
     return participants.filter((p) => {
+      const searchLower = searchTerm.toLowerCase();
       const matchesSearch =
         searchTerm === '' ||
-        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.regNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.nik.includes(searchTerm) ||
-        p.nisn.includes(searchTerm);
+        (p.name || '').toLowerCase().includes(searchLower) ||
+        (p.regNumber || '').toLowerCase().includes(searchLower) ||
+        (p.nik || '').includes(searchTerm) ||
+        (p.nisn || '').includes(searchTerm);
 
       const matchesStatus =
         statusFilter === 'ALL' || p.documentStatus === statusFilter;
@@ -81,7 +82,7 @@ export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> =
       const matchesProdi =
         prodiFilter === 'ALL' ||
         String(p.firstChoiceProdiId) === prodiFilter ||
-        p.firstChoiceProdiName.toLowerCase().includes(prodiFilter.toLowerCase());
+        (p.firstChoiceProdiName || '').toLowerCase().includes(prodiFilter.toLowerCase());
 
       return matchesSearch && matchesStatus && matchesProdi;
     });
